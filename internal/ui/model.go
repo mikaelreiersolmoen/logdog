@@ -2,7 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -10,28 +13,84 @@ import (
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 )
 
+type logLevelItem logcat.Priority
+
+func (i logLevelItem) FilterValue() string { return "" }
+
+type logLevelDelegate struct{}
+
+func (d logLevelDelegate) Height() int                             { return 1 }
+func (d logLevelDelegate) Spacing() int                            { return 0 }
+func (d logLevelDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(logLevelItem)
+	if !ok {
+		return
+	}
+
+	priority := logcat.Priority(i)
+	str := fmt.Sprintf("%s", priority.Name())
+
+	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(2).Foreground(priority.Color())
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
+
 type Model struct {
-	viewport    viewport.Model
-	buffer      *buffer.RingBuffer
-	logManager  *logcat.Manager
-	lineChan    chan string
-	ready       bool
-	width       int
-	height      int
-	appID       string
-	err         error
-	terminating bool
+	viewport       viewport.Model
+	buffer         *buffer.RingBuffer
+	logManager     *logcat.Manager
+	lineChan       chan string
+	ready          bool
+	width          int
+	height         int
+	appID          string
+	err            error
+	terminating    bool
+	showLogLevel   bool
+	logLevelList   list.Model
+	minLogLevel    logcat.Priority
 }
 
 type logLineMsg string
 type errMsg error
 
 func NewModel(appID string) Model {
+	items := []list.Item{
+		logLevelItem(logcat.Verbose),
+		logLevelItem(logcat.Debug),
+		logLevelItem(logcat.Info),
+		logLevelItem(logcat.Warn),
+		logLevelItem(logcat.Error),
+		logLevelItem(logcat.Fatal),
+	}
+
+	logLevelList := list.New(items, logLevelDelegate{}, 30, len(items)+4)
+	logLevelList.Title = "Select Minimum Log Level"
+	logLevelList.SetShowStatusBar(false)
+	logLevelList.SetFilteringEnabled(false)
+	logLevelList.SetShowPagination(false)
+	logLevelList.Styles.Title = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("39")).
+		Padding(0, 1)
+
 	return Model{
-		appID:      appID,
-		buffer:     buffer.NewRingBuffer(10000),
-		logManager: logcat.NewManager(appID),
-		lineChan:   make(chan string, 100),
+		appID:        appID,
+		buffer:       buffer.NewRingBuffer(10000),
+		logManager:   logcat.NewManager(appID),
+		lineChan:     make(chan string, 100),
+		showLogLevel: false,
+		logLevelList: logLevelList,
+		minLogLevel:  logcat.Verbose,
 	}
 }
 
@@ -77,16 +136,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			m.terminating = true
-			m.logManager.Stop()
-			return m, tea.Quit
+		if m.showLogLevel {
+			switch msg.String() {
+			case "esc":
+				m.showLogLevel = false
+				return m, nil
+			case "enter":
+				if i, ok := m.logLevelList.SelectedItem().(logLevelItem); ok {
+					m.minLogLevel = logcat.Priority(i)
+					m.showLogLevel = false
+					m.updateViewport()
+				}
+				return m, nil
+			}
+		} else {
+			switch msg.String() {
+			case "q", "ctrl+c":
+				m.terminating = true
+				m.logManager.Stop()
+				return m, tea.Quit
+			case "l":
+				m.showLogLevel = true
+				return m, nil
+			}
 		}
 	}
 
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
+	if m.showLogLevel {
+		m.logLevelList, cmd = m.logLevelList.Update(msg)
+		cmds = append(cmds, cmd)
+	} else {
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 
 	return m, tea.Batch(cmds...)
 }
@@ -96,6 +178,10 @@ func (m Model) View() string {
 		return "\n  Initializing..."
 	}
 
+	if m.showLogLevel {
+		return "\n" + m.logLevelList.View()
+	}
+
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("39")).
@@ -103,7 +189,8 @@ func (m Model) View() string {
 		BorderBottom(true).
 		Width(m.width)
 
-	header := headerStyle.Render("Logdog - Logcat Viewer [App: " + m.appID + "]")
+	header := headerStyle.Render(fmt.Sprintf("Logdog - Logcat Viewer [App: %s | Min Level: %s]",
+		m.appID, m.minLogLevel.Name()))
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
@@ -111,7 +198,7 @@ func (m Model) View() string {
 		BorderTop(true).
 		Width(m.width)
 
-	footer := footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | Buffer: %d entries",
+	footer := footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | Buffer: %d entries",
 		m.buffer.Size()))
 
 	return lipgloss.JoinVertical(
@@ -124,14 +211,16 @@ func (m Model) View() string {
 
 func (m *Model) updateViewport() {
 	entries := m.buffer.Get()
-	lines := make([]string, len(entries))
+	lines := make([]string, 0, len(entries))
 
-	for i, line := range entries {
+	for _, line := range entries {
 		entry, err := logcat.ParseLine(line)
 		if err != nil {
-			lines[i] = line
+			lines = append(lines, line)
 		} else {
-			lines[i] = entry.Format(lipgloss.NewStyle())
+			if entry.Priority >= m.minLogLevel {
+				lines = append(lines, entry.Format(lipgloss.NewStyle()))
+			}
 		}
 	}
 

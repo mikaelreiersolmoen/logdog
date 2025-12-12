@@ -74,6 +74,26 @@ func (p Priority) String() string {
 	}
 }
 
+// Name returns the full name of the priority
+func (p Priority) Name() string {
+	switch p {
+	case Verbose:
+		return "Verbose"
+	case Debug:
+		return "Debug"
+	case Info:
+		return "Info"
+	case Warn:
+		return "Warning"
+	case Error:
+		return "Error"
+	case Fatal:
+		return "Fatal"
+	default:
+		return "Unknown"
+	}
+}
+
 // Color returns the lipgloss color for the priority
 func (p Priority) Color() lipgloss.Color {
 	switch p {
