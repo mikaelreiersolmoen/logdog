@@ -212,14 +212,17 @@ func (m Model) View() string {
 func (m *Model) updateViewport() {
 	entries := m.buffer.Get()
 	lines := make([]string, 0, len(entries))
+	var lastTag string
 
 	for _, line := range entries {
 		entry, err := logcat.ParseLine(line)
 		if err != nil {
 			lines = append(lines, line)
+			lastTag = ""
 		} else {
 			if entry.Priority >= m.minLogLevel {
-				lines = append(lines, entry.Format(lipgloss.NewStyle()))
+				lines = append(lines, entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag))
+				lastTag = entry.Tag
 			}
 		}
 	}

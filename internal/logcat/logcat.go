@@ -173,6 +173,11 @@ func ParseLine(line string) (*Entry, error) {
 
 // Format returns a formatted string representation of the entry
 func (e *Entry) Format(style lipgloss.Style) string {
+	return e.FormatWithTag(style, true)
+}
+
+// FormatWithTag returns a formatted string representation with optional tag display
+func (e *Entry) FormatWithTag(style lipgloss.Style, showTag bool) string {
 	priorityStyle := lipgloss.NewStyle().
 		Foreground(e.Priority.Color()).
 		Bold(true)
@@ -180,10 +185,17 @@ func (e *Entry) Format(style lipgloss.Style) string {
 	tagStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("45")) // Cyan
 
+	var tagStr string
+	if showTag {
+		tagStr = tagStyle.Render(fmt.Sprintf("%-20s", truncate(e.Tag, 20)))
+	} else {
+		tagStr = strings.Repeat(" ", 20)
+	}
+
 	return fmt.Sprintf("%s %s %s %s",
 		e.Timestamp,
 		priorityStyle.Render(e.Priority.String()),
-		tagStyle.Render(fmt.Sprintf("%-20s", truncate(e.Tag, 20))),
+		tagStr,
 		e.Message,
 	)
 }
