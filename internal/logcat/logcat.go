@@ -180,10 +180,8 @@ func (e *Entry) Format(style lipgloss.Style) string {
 	tagStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("45")) // Cyan
 
-	return fmt.Sprintf("%s %5s %5s %s %s %s",
+	return fmt.Sprintf("%s %s %s %s",
 		e.Timestamp,
-		e.PID,
-		e.TID,
 		priorityStyle.Render(e.Priority.String()),
 		tagStyle.Render(fmt.Sprintf("%-20s", truncate(e.Tag, 20))),
 		e.Message,
