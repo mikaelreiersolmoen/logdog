@@ -74,7 +74,7 @@ func NewModel(appID string) Model {
 	}
 
 	logLevelList := list.New(items, logLevelDelegate{}, 30, len(items)+4)
-	logLevelList.Title = "Select Minimum Log Level"
+	logLevelList.Title = "Select log level"
 	logLevelList.SetShowStatusBar(false)
 	logLevelList.SetFilteringEnabled(false)
 	logLevelList.SetShowPagination(false)
@@ -189,7 +189,7 @@ func (m Model) View() string {
 		BorderBottom(true).
 		Width(m.width)
 
-	header := headerStyle.Render(fmt.Sprintf("Logdog - Logcat Viewer [App: %s | Min Level: %s]",
+	header := headerStyle.Render(fmt.Sprintf("Logdog [app: %s | log level: %s]",
 		m.appID, m.minLogLevel.Name()))
 
 	footerStyle := lipgloss.NewStyle().
@@ -198,7 +198,7 @@ func (m Model) View() string {
 		BorderTop(true).
 		Width(m.width)
 
-	footer := footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | Buffer: %d entries",
+	footer := footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | buffer: %d entries",
 		m.buffer.Size()))
 
 	return lipgloss.JoinVertical(
