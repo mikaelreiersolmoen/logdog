@@ -3,9 +3,11 @@ package ui
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -58,6 +60,14 @@ type Model struct {
 	showLogLevel   bool
 	logLevelList   list.Model
 	minLogLevel    logcat.Priority
+	showFilter     bool
+	filterInput    textinput.Model
+	filters        []Filter
+}
+
+type Filter struct {
+	isTag bool
+	regex *regexp.Regexp
 }
 
 type logLineMsg string
@@ -83,6 +93,11 @@ func NewModel(appID string) Model {
 		Foreground(lipgloss.Color("39")).
 		Padding(0, 1)
 
+	filterInput := textinput.New()
+	filterInput.Placeholder = "e.g., error|warning, tag:MyTag"
+	filterInput.CharLimit = 500
+	filterInput.Width = 80
+
 	return Model{
 		appID:        appID,
 		buffer:       buffer.NewRingBuffer(10000),
@@ -91,6 +106,9 @@ func NewModel(appID string) Model {
 		showLogLevel: false,
 		logLevelList: logLevelList,
 		minLogLevel:  logcat.Verbose,
+		showFilter:   false,
+		filterInput:  filterInput,
+		filters:      []Filter{},
 	}
 }
 
@@ -149,6 +167,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+		} else if m.showFilter {
+			switch msg.String() {
+			case "esc":
+				m.showFilter = false
+				m.filterInput.Blur()
+				return m, nil
+			case "enter":
+				m.parseFilters(m.filterInput.Value())
+				m.showFilter = false
+				m.filterInput.Blur()
+				m.updateViewport()
+				return m, nil
+			}
 		} else {
 			switch msg.String() {
 			case "q", "ctrl+c":
@@ -158,12 +189,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "l":
 				m.showLogLevel = true
 				return m, nil
+			case "f":
+				m.showFilter = true
+				m.filterInput.Focus()
+				return m, textinput.Blink
 			}
 		}
 	}
 
 	if m.showLogLevel {
 		m.logLevelList, cmd = m.logLevelList.Update(msg)
+		cmds = append(cmds, cmd)
+	} else if m.showFilter {
+		m.filterInput, cmd = m.filterInput.Update(msg)
 		cmds = append(cmds, cmd)
 	} else {
 		m.viewport, cmd = m.viewport.Update(msg)
@@ -189,8 +227,21 @@ func (m Model) View() string {
 		BorderBottom(true).
 		Width(m.width)
 
-	header := headerStyle.Render(fmt.Sprintf("Logdog [app: %s | log level: %s]",
-		m.appID, m.minLogLevel.Name()))
+	filterInfo := ""
+	if len(m.filters) > 0 {
+		var filterStrs []string
+		for _, f := range m.filters {
+			if f.isTag {
+				filterStrs = append(filterStrs, "tag:"+f.regex.String())
+			} else {
+				filterStrs = append(filterStrs, f.regex.String())
+			}
+		}
+		filterInfo = " | Filters: " + strings.Join(filterStrs, ", ")
+	}
+
+	header := headerStyle.Render(fmt.Sprintf("Logdog [app: %s | log level: %s%s]",
+		m.appID, m.minLogLevel.Name(), filterInfo))
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
@@ -198,8 +249,22 @@ func (m Model) View() string {
 		BorderTop(true).
 		Width(m.width)
 
-	footer := footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | buffer: %d entries",
-		m.buffer.Size()))
+	var footer string
+	if m.showFilter {
+		filterLabel := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("39")).
+			Bold(true).
+			Render("Filter: ")
+		
+		filterHelp := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Render(" (comma-separated, tag: prefix for tags | Enter: apply | Esc: cancel)")
+		
+		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
+	} else {
+		footer = footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | f: filter | buffer: %d entries",
+			m.buffer.Size()))
+	}
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -220,7 +285,7 @@ func (m *Model) updateViewport() {
 			lines = append(lines, line)
 			lastTag = ""
 		} else {
-			if entry.Priority >= m.minLogLevel {
+			if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
 				lines = append(lines, entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag))
 				lastTag = entry.Tag
 			}
@@ -230,6 +295,90 @@ func (m *Model) updateViewport() {
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
+}
+
+func (m *Model) parseFilters(filterStr string) {
+	m.filters = []Filter{}
+	if filterStr == "" {
+		return
+	}
+
+	parts := splitByUnescapedComma(filterStr)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		var filter Filter
+		if strings.HasPrefix(part, "tag:") {
+			filter.isTag = true
+			part = strings.TrimPrefix(part, "tag:")
+		}
+
+		// Unescape commas
+		part = strings.ReplaceAll(part, "\\,", ",")
+
+		regex, err := regexp.Compile(part)
+		if err == nil {
+			filter.regex = regex
+			m.filters = append(m.filters, filter)
+		}
+	}
+}
+
+func splitByUnescapedComma(s string) []string {
+	var parts []string
+	var current strings.Builder
+	escaped := false
+
+	for _, char := range s {
+		if escaped {
+			current.WriteRune(char)
+			escaped = false
+			continue
+		}
+
+		if char == '\\' {
+			escaped = true
+			current.WriteRune(char)
+			continue
+		}
+
+		if char == ',' {
+			parts = append(parts, current.String())
+			current.Reset()
+			continue
+		}
+
+		current.WriteRune(char)
+	}
+
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	return parts
+}
+
+func (m *Model) matchesFilters(entry *logcat.Entry) bool {
+	if len(m.filters) == 0 {
+		return true
+	}
+
+	for _, filter := range m.filters {
+		if filter.isTag {
+			if filter.regex.MatchString(entry.Tag) {
+				return true
+			}
+		} else {
+			if filter.regex.MatchString(entry.Message) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func startLogcat(manager *logcat.Manager, lineChan chan string) tea.Cmd {
