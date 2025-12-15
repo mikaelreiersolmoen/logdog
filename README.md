@@ -53,6 +53,11 @@ go build -o logdog .
 ### Controls
 
 - `↑`/`↓` or `PgUp`/`PgDn`: Scroll through logs
+- `l`: Open log level selector
+  - Arrow keys or shortcuts (`v`/`d`/`i`/`w`/`e`/`f`) to select level
+  - `Enter`: Confirm selection
+  - `Esc`: Cancel
+- `f`: Open filter input
 - `q` or `Ctrl+C`: Quit the application
 
 ## Architecture

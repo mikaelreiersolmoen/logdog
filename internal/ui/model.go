@@ -32,7 +32,25 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	}
 
 	priority := logcat.Priority(i)
-	str := fmt.Sprintf("%s", priority.Name())
+	
+	// Map priority to keyboard shortcut
+	var shortcut string
+	switch priority {
+	case logcat.Verbose:
+		shortcut = "v"
+	case logcat.Debug:
+		shortcut = "d"
+	case logcat.Info:
+		shortcut = "i"
+	case logcat.Warn:
+		shortcut = "w"
+	case logcat.Error:
+		shortcut = "e"
+	case logcat.Fatal:
+		shortcut = "f"
+	}
+	
+	str := fmt.Sprintf("(%s) %s", shortcut, priority.Name())
 
 	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(2).Foreground(priority.Color())
@@ -86,7 +104,7 @@ func NewModel(appID string, tailSize int) Model {
 	}
 
 	logLevelList := list.New(items, logLevelDelegate{}, 30, len(items)+4)
-	logLevelList.Title = "Select log level"
+	logLevelList.Title = "Select log level (v/d/i/w/e/f)"
 	logLevelList.SetShowStatusBar(false)
 	logLevelList.SetFilteringEnabled(false)
 	logLevelList.SetShowPagination(false)
@@ -182,6 +200,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.showLogLevel = false
 					m.updateViewport()
 				}
+				return m, nil
+			case "v":
+				m.minLogLevel = logcat.Verbose
+				m.showLogLevel = false
+				m.updateViewport()
+				return m, nil
+			case "d":
+				m.minLogLevel = logcat.Debug
+				m.showLogLevel = false
+				m.updateViewport()
+				return m, nil
+			case "i":
+				m.minLogLevel = logcat.Info
+				m.showLogLevel = false
+				m.updateViewport()
+				return m, nil
+			case "w":
+				m.minLogLevel = logcat.Warn
+				m.showLogLevel = false
+				m.updateViewport()
+				return m, nil
+			case "e":
+				m.minLogLevel = logcat.Error
+				m.showLogLevel = false
+				m.updateViewport()
+				return m, nil
+			case "f":
+				m.minLogLevel = logcat.Fatal
+				m.showLogLevel = false
+				m.updateViewport()
 				return m, nil
 			}
 		} else if m.showFilter {
