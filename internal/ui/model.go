@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -66,23 +67,25 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 }
 
 type Model struct {
-	viewport       viewport.Model
-	buffer         *buffer.RingBuffer
-	logManager     *logcat.Manager
-	lineChan       chan string
-	ready          bool
-	width          int
-	height         int
-	appID          string
-	terminating    bool
-	showLogLevel   bool
-	logLevelList   list.Model
-	minLogLevel    logcat.Priority
-	showFilter     bool
-	filterInput    textinput.Model
-	filters        []Filter
-	parsedEntries  []*logcat.Entry
-	needsUpdate    bool
+	viewport         viewport.Model
+	buffer           *buffer.RingBuffer
+	logManager       *logcat.Manager
+	lineChan         chan string
+	ready            bool
+	width            int
+	height           int
+	appID            string
+	terminating      bool
+	showLogLevel     bool
+	logLevelList     list.Model
+	minLogLevel      logcat.Priority
+	showFilter       bool
+	filterInput      textinput.Model
+	filters          []Filter
+	parsedEntries    []*logcat.Entry
+	needsUpdate      bool
+	selectedEntries  map[*logcat.Entry]bool
+	selectionAnchor  *logcat.Entry
 }
 
 type Filter struct {
@@ -119,18 +122,20 @@ func NewModel(appID string, tailSize int) Model {
 	filterInput.Width = 80
 
 	return Model{
-		appID:         appID,
-		buffer:        buffer.NewRingBuffer(10000),
-		logManager:    logcat.NewManager(appID, tailSize),
-		lineChan:      make(chan string, 100),
-		showLogLevel:  false,
-		logLevelList:  logLevelList,
-		minLogLevel:   logcat.Verbose,
-		showFilter:    false,
-		filterInput:   filterInput,
-		filters:       []Filter{},
-		parsedEntries: make([]*logcat.Entry, 0, 10000),
-		needsUpdate:   false,
+		appID:            appID,
+		buffer:           buffer.NewRingBuffer(10000),
+		logManager:       logcat.NewManager(appID, tailSize),
+		lineChan:         make(chan string, 100),
+		showLogLevel:     false,
+		logLevelList:     logLevelList,
+		minLogLevel:      logcat.Verbose,
+		showFilter:       false,
+		filterInput:      filterInput,
+		filters:          []Filter{},
+		parsedEntries:    make([]*logcat.Entry, 0, 10000),
+		needsUpdate:      false,
+		selectedEntries:  make(map[*logcat.Entry]bool),
+		selectionAnchor:  nil,
 	}
 }
 
@@ -258,7 +263,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showFilter = true
 				m.filterInput.Focus()
 				return m, textinput.Blink
+			case "esc":
+				if len(m.selectedEntries) > 0 {
+					m.clearSelection()
+					m.updateViewportWithScroll(false)
+				}
+				return m, nil
+			case "c":
+				if len(m.selectedEntries) > 0 {
+					m.copySelectedMessages()
+					m.clearSelection()
+					m.updateViewportWithScroll(false)
+				}
+				return m, nil
 			}
+		}
+		
+	case tea.MouseMsg:
+		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter {
+			m.handleMouseClick(msg.Y, msg.Shift)
+			m.updateViewportWithScroll(false)
+			return m, nil
 		}
 	}
 
@@ -331,8 +356,11 @@ func (m Model) View() string {
 			Render(" (comma-separated, tag: prefix for tags | Enter: apply | Esc: cancel)")
 		
 		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
+	} else if len(m.selectedEntries) > 0 {
+		selectionInfo := fmt.Sprintf("%d lines selected | c: copy | Esc: cancel", len(m.selectedEntries))
+		footer = footerStyle.Render(selectionInfo)
 	} else {
-		footer = footerStyle.Render("q: quit | ↑/↓: scroll | l: log level | f: filter")
+		footer = footerStyle.Render("q: quit | ↑/↓: scroll | l: log level | f: filter | click: select | shift+click: extend")
 	}
 
 	return lipgloss.JoinVertical(
@@ -344,19 +372,37 @@ func (m Model) View() string {
 }
 
 func (m *Model) updateViewport() {
+	m.updateViewportWithScroll(true)
+}
+
+func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
+	
+	selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("240"))
 
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-			lines = append(lines, entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag))
+			var line string
+			
+			// Highlight only the message part if selected
+			if m.selectedEntries[entry] {
+				line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle)
+			} else {
+				line = entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag)
+			}
+			
+			lines = append(lines, line)
 			lastTag = entry.Tag
 		}
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	m.viewport.SetContent(content)
-	m.viewport.GotoBottom()
+	
+	if scrollToBottom {
+		m.viewport.GotoBottom()
+	}
 }
 
 func (m *Model) parseFilters(filterStr string) {
@@ -467,4 +513,117 @@ func tickViewportUpdate() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
 		return updateViewportMsg{}
 	})
+}
+
+// getVisibleEntries returns the list of entries currently visible after filtering
+func (m *Model) getVisibleEntries() []*logcat.Entry {
+	visible := make([]*logcat.Entry, 0)
+	for _, entry := range m.parsedEntries {
+		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
+			visible = append(visible, entry)
+		}
+	}
+	return visible
+}
+
+// handleMouseClick handles clicking on a row
+func (m *Model) handleMouseClick(y int, shiftPressed bool) {
+	// Calculate which entry was clicked
+	viewportStartY := 2
+	
+	// If click is before viewport content, ignore
+	if y <= viewportStartY {
+		return
+	}
+	
+	// Calculate line within viewport (0-indexed)
+	lineInViewport := y - viewportStartY - 1
+	
+	// If click is beyond viewport height, ignore (in footer area)
+	if lineInViewport < 0 || lineInViewport >= m.viewport.Height {
+		return
+	}
+	
+	// Add viewport scroll offset to get actual line in content
+	clickedLine := lineInViewport + m.viewport.YOffset
+	
+	visible := m.getVisibleEntries()
+	if clickedLine >= 0 && clickedLine < len(visible) {
+		clickedEntry := visible[clickedLine]
+		
+		if shiftPressed && m.selectionAnchor != nil {
+			// Shift-click: extend selection from anchor to clicked entry
+			m.extendSelectionTo(clickedEntry, visible)
+		} else {
+			// Normal click: select only this row
+			m.selectedEntries = make(map[*logcat.Entry]bool)
+			m.selectedEntries[clickedEntry] = true
+			m.selectionAnchor = clickedEntry
+		}
+	}
+}
+
+// extendSelectionDown extends selection downward
+// extendSelectionTo extends selection from anchor to target entry
+func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry) {
+	if m.selectionAnchor == nil {
+		return
+	}
+	
+	anchorIdx := -1
+	targetIdx := -1
+	
+	for i, entry := range visible {
+		if entry == m.selectionAnchor {
+			anchorIdx = i
+		}
+		if entry == target {
+			targetIdx = i
+		}
+	}
+	
+	if anchorIdx < 0 || targetIdx < 0 {
+		return
+	}
+	
+	// Clear and rebuild selection
+	m.selectedEntries = make(map[*logcat.Entry]bool)
+	
+	start := anchorIdx
+	end := targetIdx
+	if start > end {
+		start, end = end, start
+	}
+	
+	for i := start; i <= end; i++ {
+		m.selectedEntries[visible[i]] = true
+	}
+}
+
+// clearSelection clears the selection
+func (m *Model) clearSelection() {
+	m.selectedEntries = make(map[*logcat.Entry]bool)
+	m.selectionAnchor = nil
+}
+
+// copySelectedMessages copies selected messages to clipboard
+func (m *Model) copySelectedMessages() {
+	if len(m.selectedEntries) == 0 {
+		return
+	}
+	
+	// Get selected entries in order
+	visible := m.getVisibleEntries()
+	var messages []string
+	for _, entry := range visible {
+		if m.selectedEntries[entry] {
+			messages = append(messages, entry.Message)
+		}
+	}
+	
+	// Copy to clipboard using pbcopy (macOS) or similar
+	clipboard := strings.Join(messages, "\n")
+	cmd := exec.Command("pbcopy")
+	cmd.Stdin = strings.NewReader(clipboard)
+	cmd.Run()
 }

@@ -178,6 +178,11 @@ func (e *Entry) Format(style lipgloss.Style) string {
 
 // FormatWithTag returns a formatted string representation with optional tag display
 func (e *Entry) FormatWithTag(style lipgloss.Style, showTag bool) string {
+	return e.FormatWithTagAndMessageStyle(style, showTag, lipgloss.NewStyle())
+}
+
+// FormatWithTagAndMessageStyle returns a formatted string with separate style for message
+func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool, messageStyle lipgloss.Style) string {
 	priorityStyle := lipgloss.NewStyle().
 		Foreground(e.Priority.Color()).
 		Bold(true)
@@ -196,7 +201,7 @@ func (e *Entry) FormatWithTag(style lipgloss.Style, showTag bool) string {
 		e.Timestamp,
 		priorityStyle.Render(e.Priority.String()),
 		tagStr,
-		e.Message,
+		messageStyle.Render(e.Message),
 	)
 }
 
