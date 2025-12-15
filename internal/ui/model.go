@@ -5,6 +5,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -62,6 +63,8 @@ type Model struct {
 	showFilter     bool
 	filterInput    textinput.Model
 	filters        []Filter
+	parsedEntries  []*logcat.Entry
+	needsUpdate    bool
 }
 
 type Filter struct {
@@ -70,6 +73,7 @@ type Filter struct {
 }
 
 type logLineMsg string
+type updateViewportMsg struct{}
 
 func NewModel(appID string) Model {
 	items := []list.Item{
@@ -97,16 +101,18 @@ func NewModel(appID string) Model {
 	filterInput.Width = 80
 
 	return Model{
-		appID:        appID,
-		buffer:       buffer.NewRingBuffer(10000),
-		logManager:   logcat.NewManager(appID),
-		lineChan:     make(chan string, 100),
-		showLogLevel: false,
-		logLevelList: logLevelList,
-		minLogLevel:  logcat.Verbose,
-		showFilter:   false,
-		filterInput:  filterInput,
-		filters:      []Filter{},
+		appID:         appID,
+		buffer:        buffer.NewRingBuffer(10000),
+		logManager:    logcat.NewManager(appID),
+		lineChan:      make(chan string, 100),
+		showLogLevel:  false,
+		logLevelList:  logLevelList,
+		minLogLevel:   logcat.Verbose,
+		showFilter:    false,
+		filterInput:   filterInput,
+		filters:       []Filter{},
+		parsedEntries: make([]*logcat.Entry, 0, 10000),
+		needsUpdate:   false,
 	}
 }
 
@@ -114,6 +120,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		startLogcat(m.logManager, m.lineChan),
 		waitForLogLine(m.lineChan),
+		tickViewportUpdate(),
 	)
 }
 
@@ -141,10 +148,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case logLineMsg:
 		m.buffer.Add(string(msg))
-		m.updateViewport()
+		entry, _ := logcat.ParseLine(string(msg))
+		if entry != nil {
+			m.parsedEntries = append(m.parsedEntries, entry)
+			if len(m.parsedEntries) > 10000 {
+				m.parsedEntries = m.parsedEntries[1:]
+			}
+		}
+		m.needsUpdate = true
 
 		if !m.terminating {
 			cmds = append(cmds, waitForLogLine(m.lineChan))
+		}
+
+	case updateViewportMsg:
+		if m.needsUpdate {
+			m.updateViewport()
+			m.needsUpdate = false
+		}
+		if !m.terminating {
+			cmds = append(cmds, tickViewportUpdate())
 		}
 
 	case tea.KeyMsg:
@@ -274,20 +297,13 @@ func (m Model) View() string {
 }
 
 func (m *Model) updateViewport() {
-	entries := m.buffer.Get()
-	lines := make([]string, 0, len(entries))
+	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
 
-	for _, line := range entries {
-		entry, err := logcat.ParseLine(line)
-		if err != nil {
-			lines = append(lines, line)
-			lastTag = ""
-		} else {
-			if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-				lines = append(lines, entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag))
-				lastTag = entry.Tag
-			}
+	for _, entry := range m.parsedEntries {
+		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
+			lines = append(lines, entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag))
+			lastTag = entry.Tag
 		}
 	}
 
@@ -398,4 +414,10 @@ func waitForLogLine(lineChan <-chan string) tea.Cmd {
 		}
 		return logLineMsg(line)
 	}
+}
+
+func tickViewportUpdate() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
+		return updateViewportMsg{}
+	})
 }
