@@ -234,8 +234,13 @@ func (m Model) View() string {
 		filterInfo = " | Filters: " + strings.Join(filterStrs, ", ")
 	}
 
+	appInfo := m.appID
+	if appInfo == "" {
+		appInfo = "all"
+	}
+
 	header := headerStyle.Render(fmt.Sprintf("Logdog [app: %s | log level: %s%s]",
-		m.appID, m.minLogLevel.Name(), filterInfo))
+		appInfo, m.minLogLevel.Name(), filterInfo))
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).

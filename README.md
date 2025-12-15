@@ -28,6 +28,9 @@ go build -o logdog .
 ## Usage
 
 ```bash
+# View all logs
+./logdog
+
 # Filter by application ID
 ./logdog --app com.example.app
 

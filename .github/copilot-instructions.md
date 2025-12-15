@@ -30,9 +30,12 @@ go build -o logdog . # Alternative direct build
 
 ### Running
 ```bash
-make run ARGS="--app com.example.app"  # Via Makefile
-go run . --app com.example.app         # Direct execution
-./logdog -a com.example.app            # From built binary
+make run                               # Run without filter (all logs)
+make run ARGS="--app com.example.app"  # Via Makefile with filter
+go run . --app com.example.app         # Direct execution with filter
+go run .                               # Direct execution without filter
+./logdog -a com.example.app            # From built binary with filter
+./logdog                               # From built binary without filter
 ```
 
 ### Testing
@@ -68,8 +71,8 @@ go install    # Alternative
 ## Adding New Features
 
 ### Adding New Filters
-1. Update logcat package to support new filter parameters
-2. Modify main.go CLI flags
+1. Update logcat package to support new filter parameters (optional if appID is empty)
+2. Modify main.go CLI flags if needed
 3. Pass filters to logcat initialization
 4. Update UI to display active filters
 
