@@ -65,6 +65,7 @@ type Model struct {
 	filters        []Filter
 	parsedEntries  []*logcat.Entry
 	needsUpdate    bool
+	totalReceived  int
 }
 
 type Filter struct {
@@ -154,6 +155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.parsedEntries) > 10000 {
 				m.parsedEntries = m.parsedEntries[1:]
 			}
+			m.totalReceived++
 		}
 		m.needsUpdate = true
 
@@ -284,8 +286,8 @@ func (m Model) View() string {
 		
 		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
 	} else {
-		footer = footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | f: filter | buffer: %d entries",
-			m.buffer.Size()))
+		footer = footerStyle.Render(fmt.Sprintf("q: quit | ↑/↓: scroll | l: log level | f: filter | buffer: %d/%d entries",
+			len(m.parsedEntries), m.totalReceived))
 	}
 
 	return lipgloss.JoinVertical(
