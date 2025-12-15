@@ -6,6 +6,7 @@ A text-based interface for viewing and filtering Android logcat logs, built with
 
 - **Real-time log viewing**: Continuously reads logs from a spawned `adb logcat` process
 - **Application filtering**: Filter logs by application ID via CLI flag
+- **Configurable tail size**: Load recent N entries (default 1000) for fast startup
 - **Efficient rendering**: Uses circular buffer, renders only visible rows, and batches updates
 - **Color-coded priority levels**: Visual distinction for Verbose, Debug, Info, Warn, Error, and Fatal logs
 - **Viewport navigation**: Scroll through logs with keyboard controls
@@ -28,14 +29,20 @@ go build -o logdog .
 ## Usage
 
 ```bash
-# View all logs
+# View all logs (last 1000 entries by default)
 ./logdog
+
+# View last 5000 entries
+./logdog --tail 5000
 
 # Filter by application ID
 ./logdog --app com.example.app
 
-# Using shorthand flag
-./logdog -a com.example.app
+# Filter by app with custom tail size
+./logdog --app com.example.app --tail 500
+
+# Using shorthand flags
+./logdog -a com.example.app -t 2000
 ```
 
 ### Prerequisites

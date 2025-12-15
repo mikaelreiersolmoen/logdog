@@ -12,13 +12,16 @@ import (
 
 func main() {
 	var appID string
+	var tailSize int
 	flag.StringVar(&appID, "app", "", "Application ID to filter logcat logs (optional)")
 	flag.StringVar(&appID, "a", "", "Application ID to filter logcat logs (shorthand)")
+	flag.IntVar(&tailSize, "tail", 1000, "Number of recent log entries to load initially")
+	flag.IntVar(&tailSize, "t", 1000, "Number of recent log entries to load initially (shorthand)")
 	flag.Parse()
 
 	// Validate connectivity before starting UI (only if app filtering is requested)
 	if appID != "" {
-		logManager := logcat.NewManager(appID)
+		logManager := logcat.NewManager(appID, tailSize)
 		if err := logManager.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -26,7 +29,7 @@ func main() {
 		logManager.Stop()
 	}
 
-	m := ui.NewModel(appID)
+	m := ui.NewModel(appID, tailSize)
 
 	p := tea.NewProgram(
 		m,

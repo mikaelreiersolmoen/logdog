@@ -213,20 +213,25 @@ type Manager struct {
 	scanner  *bufio.Scanner
 	appID    string
 	stopChan chan struct{}
+	tailSize int
 }
 
 // NewManager creates a new logcat manager
-func NewManager(appID string) *Manager {
+func NewManager(appID string, tailSize int) *Manager {
+	if tailSize <= 0 {
+		tailSize = 1000 // Default to 1000 entries
+	}
 	return &Manager{
 		appID:    appID,
 		stopChan: make(chan struct{}),
+		tailSize: tailSize,
 	}
 }
 
 // Start starts the logcat process
 func (m *Manager) Start() error {
 	// Build logcat command with app ID filter
-	args := []string{"logcat", "-v", "threadtime"}
+	args := []string{"logcat", "-v", "threadtime", "-T", fmt.Sprintf("%d", m.tailSize)}
 	if m.appID != "" {
 		pid, err := m.getPID()
 		if err != nil {

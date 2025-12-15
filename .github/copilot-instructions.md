@@ -30,12 +30,14 @@ go build -o logdog . # Alternative direct build
 
 ### Running
 ```bash
-make run                               # Run without filter (all logs)
+make run                               # Run without filter (last 1000 entries)
+make run ARGS="--tail 5000"            # Load last 5000 entries
 make run ARGS="--app com.example.app"  # Via Makefile with filter
 go run . --app com.example.app         # Direct execution with filter
-go run .                               # Direct execution without filter
+go run . --tail 2000                   # Direct execution with custom tail
 ./logdog -a com.example.app            # From built binary with filter
-./logdog                               # From built binary without filter
+./logdog -t 500                        # From built binary with custom tail
+./logdog                               # From built binary (default 1000 entries)
 ```
 
 ### Testing

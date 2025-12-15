@@ -76,7 +76,7 @@ type Filter struct {
 type logLineMsg string
 type updateViewportMsg struct{}
 
-func NewModel(appID string) Model {
+func NewModel(appID string, tailSize int) Model {
 	items := []list.Item{
 		logLevelItem(logcat.Verbose),
 		logLevelItem(logcat.Debug),
@@ -104,7 +104,7 @@ func NewModel(appID string) Model {
 	return Model{
 		appID:         appID,
 		buffer:        buffer.NewRingBuffer(10000),
-		logManager:    logcat.NewManager(appID),
+		logManager:    logcat.NewManager(appID, tailSize),
 		lineChan:      make(chan string, 100),
 		showLogLevel:  false,
 		logLevelList:  logLevelList,
