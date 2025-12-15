@@ -230,7 +230,7 @@ func (m *Manager) Start() error {
 	if m.appID != "" {
 		pid, err := m.getPID()
 		if err != nil {
-			return fmt.Errorf("failed to get PID for app %s: %w", m.appID, err)
+			return err
 		}
 		if pid != "" {
 			args = append(args, "--pid="+pid)
@@ -253,15 +253,28 @@ func (m *Manager) Start() error {
 
 // getPID gets the PID for the app package name
 func (m *Manager) getPID() (string, error) {
-	cmd := exec.Command("adb", "shell", "pidof", m.appID)
+	// First check if device is connected
+	cmd := exec.Command("adb", "devices")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get PID: %w", err)
+		return "", fmt.Errorf("adb command failed - is Android SDK installed?")
+	}
+	
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) <= 1 {
+		return "", fmt.Errorf("no devices/emulators found - connect a device or start an emulator")
+	}
+	
+	// Get PID
+	cmd = exec.Command("adb", "shell", "pidof", m.appID)
+	output, err = cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", m.appID)
 	}
 	
 	pid := strings.TrimSpace(string(output))
 	if pid == "" {
-		return "", fmt.Errorf("app not running or package name not found")
+		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", m.appID)
 	}
 	
 	return pid, nil

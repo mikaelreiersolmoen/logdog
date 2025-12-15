@@ -55,7 +55,6 @@ type Model struct {
 	width          int
 	height         int
 	appID          string
-	err            error
 	terminating    bool
 	showLogLevel   bool
 	logLevelList   list.Model
@@ -71,7 +70,6 @@ type Filter struct {
 }
 
 type logLineMsg string
-type errMsg error
 
 func NewModel(appID string) Model {
 	items := []list.Item{
@@ -148,10 +146,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.terminating {
 			cmds = append(cmds, waitForLogLine(m.lineChan))
 		}
-
-	case errMsg:
-		m.err = msg
-		return m, tea.Quit
 
 	case tea.KeyMsg:
 		if m.showLogLevel {
@@ -384,7 +378,7 @@ func (m *Model) matchesFilters(entry *logcat.Entry) bool {
 func startLogcat(manager *logcat.Manager, lineChan chan string) tea.Cmd {
 	return func() tea.Msg {
 		if err := manager.Start(); err != nil {
-			return errMsg(err)
+			panic(err)
 		}
 		go manager.ReadLines(lineChan)
 		return nil
