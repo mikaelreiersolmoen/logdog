@@ -82,13 +82,14 @@ type Model struct {
 	minLogLevel      logcat.Priority
 	showFilter       bool
 	filterInput      textinput.Model
-	filters          []Filter
-	parsedEntries    []*logcat.Entry
-	needsUpdate      bool
-	highlightedEntry *logcat.Entry
-	selectionMode    bool
-	selectedEntries  map[*logcat.Entry]bool
-	selectionAnchor  *logcat.Entry
+	filters           []Filter
+	parsedEntries     []*logcat.Entry
+	needsUpdate       bool
+	highlightedEntry  *logcat.Entry
+	selectionMode     bool
+	messageOnlySelect bool // true for message-only (v), false for whole-line (V)
+	selectedEntries   map[*logcat.Entry]bool
+	selectionAnchor   *logcat.Entry
 }
 
 type Filter struct {
@@ -134,14 +135,15 @@ func NewModel(appID string, tailSize int) Model {
 		logLevelList:     logLevelList,
 		minLogLevel:      logcat.Verbose,
 		showFilter:       false,
-		filterInput:      filterInput,
-		filters:          []Filter{},
-		parsedEntries:    make([]*logcat.Entry, 0, 10000),
-		needsUpdate:      false,
-		highlightedEntry: nil,
-		selectionMode:    false,
-		selectedEntries:  make(map[*logcat.Entry]bool),
-		selectionAnchor:  nil,
+		filterInput:       filterInput,
+		filters:           []Filter{},
+		parsedEntries:     make([]*logcat.Entry, 0, 10000),
+		needsUpdate:       false,
+		highlightedEntry:  nil,
+		selectionMode:     false,
+		messageOnlySelect: false,
+		selectedEntries:   make(map[*logcat.Entry]bool),
+		selectionAnchor:   nil,
 	}
 }
 
@@ -295,8 +297,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.highlightedEntry = nil
 				m.updateViewportWithScroll(false)
 				return m, nil
-			case "V": // Shift+v to enter selection mode
-				m.enterSelectionMode()
+			case "v": // v to enter message-only selection mode
+				m.enterSelectionMode(true)
+				m.updateViewportWithScroll(false)
+				return m, nil
+			case "V": // Shift+v to enter whole-line selection mode
+				m.enterSelectionMode(false)
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "c":
@@ -404,10 +410,14 @@ func (m Model) View() string {
 
 		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
 	} else if m.selectionMode {
-		selectionInfo := fmt.Sprintf("SELECTION MODE | %d lines selected | j/k: extend | click: extend | c: copy | Esc: exit", len(m.selectedEntries))
+		modeType := "WHOLE-LINE"
+		if m.messageOnlySelect {
+			modeType = "MESSAGE"
+		}
+		selectionInfo := fmt.Sprintf("%s SELECTION | %d lines | j/k: extend | v/V: switch mode | c: copy | Esc: exit", modeType, len(m.selectedEntries))
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | j/k: highlight | shift+v: select | l: log level | f: filter"
+		baseHelp := "q: quit | j/k: highlight | v: select msg | V: select line | l: log level | f: filter"
 
 		// Add app status if filtering by app
 		if m.appID != "" && m.appStatus != "" {
@@ -458,7 +468,13 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
 				// Strong selection style
-				line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle)
+				if m.messageOnlySelect {
+					// Message-only: only highlight the message part
+					line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle)
+				} else {
+					// Whole-line: highlight everything by passing the background to all parts
+					line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, selectedStyle)
+				}
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style
 				line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, highlightStyle)
@@ -477,6 +493,45 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	if scrollToBottom {
 		m.viewport.GotoBottom()
 	}
+}
+
+// formatEntryWithBackground formats an entry with background color applied to all parts
+func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style) string {
+	priorityStyle := lipgloss.NewStyle().
+		Foreground(entry.Priority.Color()).
+		Background(bgStyle.GetBackground()).
+		Bold(true)
+
+	tagStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("45")).
+		Background(bgStyle.GetBackground())
+	
+	messageStyle := lipgloss.NewStyle().
+		Background(bgStyle.GetBackground())
+	
+	timestampStyle := lipgloss.NewStyle().
+		Background(bgStyle.GetBackground())
+
+	var tagStr string
+	if showTag {
+		tagStr = tagStyle.Render(fmt.Sprintf("%-20s", truncateString(entry.Tag, 20)))
+	} else {
+		tagStr = bgStyle.Render(strings.Repeat(" ", 20))
+	}
+
+	return fmt.Sprintf("%s %s %s %s",
+		timestampStyle.Render(entry.Timestamp),
+		priorityStyle.Render(entry.Priority.String()),
+		tagStr,
+		messageStyle.Render(entry.Message),
+	)
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func (m *Model) parseFilters(filterStr string) {
@@ -683,8 +738,15 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 }
 
 // enterSelectionMode enters selection mode
-func (m *Model) enterSelectionMode() {
+func (m *Model) enterSelectionMode(messageOnly bool) {
+	// If already in selection mode, just switch the mode type
+	if m.selectionMode {
+		m.messageOnlySelect = messageOnly
+		return
+	}
+	
 	m.selectionMode = true
+	m.messageOnlySelect = messageOnly
 
 	// If there's a highlighted entry, use it as the anchor
 	if m.highlightedEntry != nil {
@@ -838,15 +900,21 @@ func (m *Model) copySelectedMessages() {
 	
 	// Get selected entries in order
 	visible := m.getVisibleEntries()
-	var messages []string
+	var lines []string
 	for _, entry := range visible {
 		if m.selectedEntries[entry] {
-			messages = append(messages, entry.Message)
+			if m.messageOnlySelect {
+				// Copy only the message
+				lines = append(lines, entry.Message)
+			} else {
+				// Copy the whole line (without styling)
+				lines = append(lines, entry.Format(lipgloss.NewStyle()))
+			}
 		}
 	}
 	
 	// Copy to clipboard using pbcopy (macOS) or similar
-	clipboard := strings.Join(messages, "\n")
+	clipboard := strings.Join(lines, "\n")
 	cmd := exec.Command("pbcopy")
 	cmd.Stdin = strings.NewReader(clipboard)
 	cmd.Run()
