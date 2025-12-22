@@ -457,9 +457,9 @@ func (m *Model) updateViewport() {
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
-
-	selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("240"))
-	highlightStyle := lipgloss.NewStyle().Background(lipgloss.Color("235")) // Subtle highlight
+	
+	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
+	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"}) // Subtle highlight
 
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
