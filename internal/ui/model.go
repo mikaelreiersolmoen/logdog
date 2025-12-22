@@ -476,8 +476,8 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 					line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, selectedStyle)
 				}
 			} else if entry == m.highlightedEntry {
-				// Subtle highlight style
-				line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, highlightStyle)
+				// Subtle highlight style - whole line background
+				line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, highlightStyle)
 			} else {
 				line = entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag)
 			}
