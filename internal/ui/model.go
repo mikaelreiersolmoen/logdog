@@ -85,9 +85,10 @@ type Model struct {
 	filters          []Filter
 	parsedEntries    []*logcat.Entry
 	needsUpdate      bool
+	highlightedEntry *logcat.Entry
+	selectionMode    bool
 	selectedEntries  map[*logcat.Entry]bool
 	selectionAnchor  *logcat.Entry
-	extendMode       bool
 }
 
 type Filter struct {
@@ -137,9 +138,10 @@ func NewModel(appID string, tailSize int) Model {
 		filters:          []Filter{},
 		parsedEntries:    make([]*logcat.Entry, 0, 10000),
 		needsUpdate:      false,
+		highlightedEntry: nil,
+		selectionMode:    false,
 		selectedEntries:  make(map[*logcat.Entry]bool),
 		selectionAnchor:  nil,
-		extendMode:       false,
 	}
 }
 
@@ -281,33 +283,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterInput.Focus()
 				return m, textinput.Blink
 			case "esc":
-				if len(m.selectedEntries) > 0 {
+				if m.selectionMode {
+					m.selectionMode = false
 					m.clearSelection()
-					m.updateViewportWithScroll(false)
 				}
-				if m.extendMode {
-					m.extendMode = false
-				}
+				m.highlightedEntry = nil
+				m.updateViewportWithScroll(false)
 				return m, nil
-			case "x":
-				// Toggle extend mode for terminals that don't support modifier keys
-				m.extendMode = !m.extendMode
+			case "V": // Shift+v to enter selection mode
+				m.enterSelectionMode()
+				m.updateViewportWithScroll(false)
 				return m, nil
 			case "c":
-				if len(m.selectedEntries) > 0 {
+				if m.selectionMode && len(m.selectedEntries) > 0 {
 					m.copySelectedMessages()
 					m.clearSelection()
+					m.selectionMode = false
 					m.updateViewportWithScroll(false)
 				}
+				return m, nil
+			case "j", "down":
+				if m.selectionMode {
+					m.extendSelectionDown()
+				} else {
+					m.moveHighlightDown()
+				}
+				m.updateViewportWithScroll(false)
+				return m, nil
+			case "k", "up":
+				if m.selectionMode {
+					m.extendSelectionUp()
+				} else {
+					m.moveHighlightUp()
+				}
+				m.updateViewportWithScroll(false)
 				return m, nil
 			}
 		}
 		
 	case tea.MouseMsg:
 		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter {
-			// Use Ctrl/Shift as modifier, or check extend mode for terminals that don't support modifiers
-			shiftPressed := msg.Ctrl || msg.Shift || m.extendMode
-			m.handleMouseClick(msg.Y, shiftPressed)
+			m.handleMouseClick(msg.Y)
 			m.updateViewportWithScroll(false)
 			return m, nil
 		}
@@ -382,13 +398,11 @@ func (m Model) View() string {
 			Render(" (comma-separated, tag: prefix for tags | Enter: apply | Esc: cancel)")
 
 		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
-	} else if len(m.selectedEntries) > 0 {
-		selectionInfo := fmt.Sprintf("%d lines selected | c: copy | Esc: cancel", len(m.selectedEntries))
+	} else if m.selectionMode {
+		selectionInfo := fmt.Sprintf("SELECTION MODE | %d lines selected | j/k: extend | click: extend | c: copy | Esc: exit", len(m.selectedEntries))
 		footer = footerStyle.Render(selectionInfo)
-	} else if m.extendMode {
-		footer = footerStyle.Render("EXTEND MODE - next click extends selection | x: toggle off")
 	} else {
-		baseHelp := "q: quit | ↑/↓: scroll | l: log level | f: filter | click: select | x: extend mode"
+		baseHelp := "q: quit | j/k: highlight | shift+v: select | l: log level | f: filter"
 
 		// Add app status if filtering by app
 		if m.appID != "" && m.appStatus != "" {
@@ -428,20 +442,25 @@ func (m *Model) updateViewport() {
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
-	
+
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("240"))
+	highlightStyle := lipgloss.NewStyle().Background(lipgloss.Color("235")) // Subtle highlight
 
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
 			var line string
-			
-			// Highlight only the message part if selected
+
+			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
+				// Strong selection style
 				line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle)
+			} else if entry == m.highlightedEntry {
+				// Subtle highlight style
+				line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, highlightStyle)
 			} else {
 				line = entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag)
 			}
-			
+
 			lines = append(lines, line)
 			lastTag = entry.Tag
 		}
@@ -449,7 +468,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	m.viewport.SetContent(content)
-	
+
 	if scrollToBottom {
 		m.viewport.GotoBottom()
 	}
@@ -587,38 +606,36 @@ func (m *Model) getVisibleEntries() []*logcat.Entry {
 }
 
 // handleMouseClick handles clicking on a row
-func (m *Model) handleMouseClick(y int, shiftPressed bool) {
+func (m *Model) handleMouseClick(y int) {
 	// Calculate which entry was clicked
 	viewportStartY := 2
-	
+
 	// If click is before viewport content, ignore
 	if y <= viewportStartY {
 		return
 	}
-	
+
 	// Calculate line within viewport (0-indexed)
 	lineInViewport := y - viewportStartY - 1
-	
+
 	// If click is beyond viewport height, ignore (in footer area)
 	if lineInViewport < 0 || lineInViewport >= m.viewport.Height {
 		return
 	}
-	
+
 	// Add viewport scroll offset to get actual line in content
 	clickedLine := lineInViewport + m.viewport.YOffset
-	
+
 	visible := m.getVisibleEntries()
 	if clickedLine >= 0 && clickedLine < len(visible) {
 		clickedEntry := visible[clickedLine]
-		
-		if shiftPressed && m.selectionAnchor != nil {
-			// Shift-click: extend selection from anchor to clicked entry
+
+		if m.selectionMode {
+			// In selection mode: extend selection to clicked entry
 			m.extendSelectionTo(clickedEntry, visible)
 		} else {
-			// Normal click: select only this row
-			m.selectedEntries = make(map[*logcat.Entry]bool)
-			m.selectedEntries[clickedEntry] = true
-			m.selectionAnchor = clickedEntry
+			// Not in selection mode: just highlight
+			m.highlightedEntry = clickedEntry
 		}
 	}
 }
@@ -657,6 +674,148 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 	
 	for i := start; i <= end; i++ {
 		m.selectedEntries[visible[i]] = true
+	}
+}
+
+// enterSelectionMode enters selection mode
+func (m *Model) enterSelectionMode() {
+	m.selectionMode = true
+
+	// If there's a highlighted entry, use it as the anchor
+	if m.highlightedEntry != nil {
+		m.selectedEntries = make(map[*logcat.Entry]bool)
+		m.selectedEntries[m.highlightedEntry] = true
+		m.selectionAnchor = m.highlightedEntry
+	} else {
+		// Otherwise, select the last visible entry
+		visible := m.getVisibleEntries()
+		if len(visible) > 0 {
+			lastEntry := visible[len(visible)-1]
+			m.selectedEntries = make(map[*logcat.Entry]bool)
+			m.selectedEntries[lastEntry] = true
+			m.selectionAnchor = lastEntry
+			m.highlightedEntry = lastEntry
+		}
+	}
+}
+
+// moveHighlightDown moves the highlight down one line
+func (m *Model) moveHighlightDown() {
+	visible := m.getVisibleEntries()
+	if len(visible) == 0 {
+		return
+	}
+
+	if m.highlightedEntry == nil {
+		// Start at the first visible entry
+		m.highlightedEntry = visible[0]
+		return
+	}
+
+	// Find current highlight and move down
+	for i, entry := range visible {
+		if entry == m.highlightedEntry && i < len(visible)-1 {
+			m.highlightedEntry = visible[i+1]
+			return
+		}
+	}
+}
+
+// moveHighlightUp moves the highlight up one line
+func (m *Model) moveHighlightUp() {
+	visible := m.getVisibleEntries()
+	if len(visible) == 0 {
+		return
+	}
+
+	if m.highlightedEntry == nil {
+		// Start at the last visible entry
+		m.highlightedEntry = visible[len(visible)-1]
+		return
+	}
+
+	// Find current highlight and move up
+	for i, entry := range visible {
+		if entry == m.highlightedEntry && i > 0 {
+			m.highlightedEntry = visible[i-1]
+			return
+		}
+	}
+}
+
+// extendSelectionDown extends the selection downward
+func (m *Model) extendSelectionDown() {
+	visible := m.getVisibleEntries()
+	if len(visible) == 0 || m.selectionAnchor == nil {
+		return
+	}
+
+	anchorIdx := -1
+	highestIdx := -1
+	lowestIdx := -1
+	
+	for i, entry := range visible {
+		if entry == m.selectionAnchor {
+			anchorIdx = i
+		}
+		if m.selectedEntries[entry] {
+			if highestIdx == -1 || i < highestIdx {
+				highestIdx = i
+			}
+			if lowestIdx == -1 || i > lowestIdx {
+				lowestIdx = i
+			}
+		}
+	}
+
+	if anchorIdx == -1 || lowestIdx == -1 {
+		return
+	}
+
+	// If we have selection above the anchor, shrink from top first
+	if highestIdx < anchorIdx {
+		delete(m.selectedEntries, visible[highestIdx])
+	} else if lowestIdx < len(visible)-1 {
+		// Otherwise extend downward
+		m.selectedEntries[visible[lowestIdx+1]] = true
+	}
+}
+
+// extendSelectionUp extends the selection upward
+func (m *Model) extendSelectionUp() {
+	visible := m.getVisibleEntries()
+	if len(visible) == 0 || m.selectionAnchor == nil {
+		return
+	}
+
+	anchorIdx := -1
+	highestIdx := -1
+	lowestIdx := -1
+	
+	for i, entry := range visible {
+		if entry == m.selectionAnchor {
+			anchorIdx = i
+		}
+		if m.selectedEntries[entry] {
+			if highestIdx == -1 || i < highestIdx {
+				highestIdx = i
+			}
+			if lowestIdx == -1 || i > lowestIdx {
+				lowestIdx = i
+			}
+		}
+	}
+
+	if anchorIdx == -1 || highestIdx == -1 {
+		return
+	}
+
+	// If we have selection below the anchor, shrink from bottom first
+	if lowestIdx > anchorIdx {
+		delete(m.selectedEntries, visible[lowestIdx])
+	} else if highestIdx > 0 {
+		// Otherwise extend upward
+		m.selectedEntries[visible[highestIdx-1]] = true
 	}
 }
 
