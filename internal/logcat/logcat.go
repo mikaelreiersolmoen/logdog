@@ -214,11 +214,15 @@ func truncate(s string, maxLen int) string {
 
 // Manager manages the logcat process
 type Manager struct {
-	cmd      *exec.Cmd
-	scanner  *bufio.Scanner
-	appID    string
-	stopChan chan struct{}
-	tailSize int
+	cmd             *exec.Cmd
+	scanner         *bufio.Scanner
+	appID           string
+	stopChan        chan struct{}
+	monitorStopChan chan struct{}
+	tailSize        int
+	currentPID      string
+	statusChan      chan string
+	lineChan        chan<- string
 }
 
 // NewManager creates a new logcat manager
@@ -227,9 +231,11 @@ func NewManager(appID string, tailSize int) *Manager {
 		tailSize = 1000 // Default to 1000 entries
 	}
 	return &Manager{
-		appID:    appID,
-		stopChan: make(chan struct{}),
-		tailSize: tailSize,
+		appID:           appID,
+		stopChan:        make(chan struct{}),
+		monitorStopChan: make(chan struct{}),
+		tailSize:        tailSize,
+		statusChan:      make(chan string, 10),
 	}
 }
 
@@ -243,7 +249,9 @@ func (m *Manager) Start() error {
 			return err
 		}
 		if pid != "" {
+			m.currentPID = pid
 			args = append(args, "--pid="+pid)
+			m.statusChan <- "running"
 		}
 	}
 
@@ -258,6 +266,12 @@ func (m *Manager) Start() error {
 	}
 
 	m.scanner = bufio.NewScanner(stdout)
+
+	// Start PID monitoring if filtering by app
+	if m.appID != "" && m.currentPID != "" {
+		go m.monitorPID()
+	}
+
 	return nil
 }
 
@@ -290,11 +304,113 @@ func (m *Manager) getPID() (string, error) {
 	return pid, nil
 }
 
+// isPIDRunning checks if a PID is still running
+func (m *Manager) isPIDRunning(pid string) bool {
+	cmd := exec.Command("adb", "shell", "ps", "-p", pid)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	// If ps returns output with the PID, the process is running
+	return strings.Contains(string(output), pid)
+}
+
+// monitorPID monitors the current PID and restarts logcat when the app restarts
+func (m *Manager) monitorPID() {
+	checkInterval := 2 * time.Second
+	pollInterval := 1 * time.Second
+
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.monitorStopChan:
+			return
+		case <-ticker.C:
+			// Check if current PID is still running
+			if !m.isPIDRunning(m.currentPID) {
+				// App has stopped
+				m.statusChan <- "stopped"
+
+				// Start polling for app restart
+				ticker.Stop()
+				ticker = time.NewTicker(pollInterval)
+
+				// Poll for new PID
+				for {
+					select {
+					case <-m.monitorStopChan:
+						return
+					case <-ticker.C:
+						m.statusChan <- "reconnecting"
+						newPID, err := m.getPID()
+						if err == nil && newPID != "" && newPID != m.currentPID {
+							// App has restarted with new PID
+							m.currentPID = newPID
+							if err := m.restart(); err == nil {
+								m.statusChan <- "running"
+								// Resume normal check interval
+								ticker.Stop()
+								ticker = time.NewTicker(checkInterval)
+								goto continueMonitoring
+							}
+						}
+					}
+				}
+			}
+		continueMonitoring:
+		}
+	}
+}
+
+// restart stops the current logcat process and starts a new one with the current PID
+func (m *Manager) restart() error {
+	// Stop the current process
+	if m.cmd != nil && m.cmd.Process != nil {
+		m.cmd.Process.Kill()
+	}
+
+	// Build new logcat command with updated PID
+	args := []string{"logcat", "-v", "threadtime", "-T", "0"} // Use -T 0 for restarts to avoid duplicates
+	if m.currentPID != "" {
+		args = append(args, "--pid="+m.currentPID)
+	}
+
+	m.cmd = exec.Command("adb", args...)
+	stdout, err := m.cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdout pipe: %w", err)
+	}
+
+	if err := m.cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start logcat: %w", err)
+	}
+
+	m.scanner = bufio.NewScanner(stdout)
+
+	// Restart the ReadLines goroutine with the new scanner
+	if m.lineChan != nil {
+		go m.readLinesInternal()
+	}
+
+	return nil
+}
+
+// StatusChan returns the channel for receiving status updates
+func (m *Manager) StatusChan() <-chan string {
+	return m.statusChan
+}
+
 // ReadLines reads lines from logcat and sends them on the channel
 // Returns when Stop() is called or logcat process ends
 func (m *Manager) ReadLines(lineChan chan<- string) {
-	defer close(lineChan)
+	m.lineChan = lineChan
+	m.readLinesInternal()
+}
 
+// readLinesInternal is the internal implementation of ReadLines
+func (m *Manager) readLinesInternal() {
 	// Use a buffer to batch lines
 	batch := make([]string, 0, 100)
 	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS
@@ -306,7 +422,7 @@ func (m *Manager) ReadLines(lineChan chan<- string) {
 			// Send any remaining lines
 			if len(batch) > 0 {
 				for _, line := range batch {
-					lineChan <- line
+					m.lineChan <- line
 				}
 			}
 			return
@@ -314,7 +430,7 @@ func (m *Manager) ReadLines(lineChan chan<- string) {
 			// Flush batch periodically
 			if len(batch) > 0 {
 				for _, line := range batch {
-					lineChan <- line
+					m.lineChan <- line
 				}
 				batch = batch[:0]
 			}
@@ -325,7 +441,7 @@ func (m *Manager) ReadLines(lineChan chan<- string) {
 				// If batch is full, send immediately
 				if len(batch) >= 100 {
 					for _, line := range batch {
-						lineChan <- line
+						m.lineChan <- line
 					}
 					batch = batch[:0]
 				}
@@ -341,9 +457,10 @@ func (m *Manager) ReadLines(lineChan chan<- string) {
 	}
 }
 
-// Stop stops the logcat process
+// Stop stops the logcat process and monitoring
 func (m *Manager) Stop() error {
 	close(m.stopChan)
+	close(m.monitorStopChan)
 	if m.cmd != nil && m.cmd.Process != nil {
 		return m.cmd.Process.Kill()
 	}

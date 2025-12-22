@@ -75,6 +75,7 @@ type Model struct {
 	width            int
 	height           int
 	appID            string
+	appStatus        string
 	terminating      bool
 	showLogLevel     bool
 	logLevelList     list.Model
@@ -86,6 +87,7 @@ type Model struct {
 	needsUpdate      bool
 	selectedEntries  map[*logcat.Entry]bool
 	selectionAnchor  *logcat.Entry
+	extendMode       bool
 }
 
 type Filter struct {
@@ -95,6 +97,7 @@ type Filter struct {
 
 type logLineMsg string
 type updateViewportMsg struct{}
+type appStatusMsg string
 
 func NewModel(appID string, tailSize int) Model {
 	items := []list.Item{
@@ -136,15 +139,23 @@ func NewModel(appID string, tailSize int) Model {
 		needsUpdate:      false,
 		selectedEntries:  make(map[*logcat.Entry]bool),
 		selectionAnchor:  nil,
+		extendMode:       false,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		startLogcat(m.logManager, m.lineChan),
 		waitForLogLine(m.lineChan),
 		tickViewportUpdate(),
-	)
+	}
+
+	// If filtering by app, listen for status updates
+	if m.appID != "" {
+		cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -182,6 +193,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if !m.terminating {
 			cmds = append(cmds, waitForLogLine(m.lineChan))
+		}
+
+	case appStatusMsg:
+		m.appStatus = string(msg)
+		if !m.terminating {
+			cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
 		}
 
 	case updateViewportMsg:
@@ -268,6 +285,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.clearSelection()
 					m.updateViewportWithScroll(false)
 				}
+				if m.extendMode {
+					m.extendMode = false
+				}
+				return m, nil
+			case "x":
+				// Toggle extend mode for terminals that don't support modifier keys
+				m.extendMode = !m.extendMode
 				return m, nil
 			case "c":
 				if len(m.selectedEntries) > 0 {
@@ -281,7 +305,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 	case tea.MouseMsg:
 		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter {
-			m.handleMouseClick(msg.Y, msg.Shift)
+			// Use Ctrl/Shift as modifier, or check extend mode for terminals that don't support modifiers
+			shiftPressed := msg.Ctrl || msg.Shift || m.extendMode
+			m.handleMouseClick(msg.Y, shiftPressed)
 			m.updateViewportWithScroll(false)
 			return m, nil
 		}
@@ -350,17 +376,41 @@ func (m Model) View() string {
 			Foreground(lipgloss.Color("39")).
 			Bold(true).
 			Render("Filter: ")
-		
+
 		filterHelp := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
 			Render(" (comma-separated, tag: prefix for tags | Enter: apply | Esc: cancel)")
-		
+
 		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
 	} else if len(m.selectedEntries) > 0 {
 		selectionInfo := fmt.Sprintf("%d lines selected | c: copy | Esc: cancel", len(m.selectedEntries))
 		footer = footerStyle.Render(selectionInfo)
+	} else if m.extendMode {
+		footer = footerStyle.Render("EXTEND MODE - next click extends selection | x: toggle off")
 	} else {
-		footer = footerStyle.Render("q: quit | ↑/↓: scroll | l: log level | f: filter | click: select | shift+click: extend")
+		baseHelp := "q: quit | ↑/↓: scroll | l: log level | f: filter | click: select | x: extend mode"
+
+		// Add app status if filtering by app
+		if m.appID != "" && m.appStatus != "" {
+			statusStyle := lipgloss.NewStyle()
+			var statusText string
+
+			switch m.appStatus {
+			case "running":
+				statusStyle = statusStyle.Foreground(lipgloss.Color("40")) // Green
+				statusText = "running"
+			case "stopped":
+				statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
+				statusText = "disconnected"
+			case "reconnecting":
+				statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
+				statusText = "disconnected"
+			}
+
+			footer = footerStyle.Render(baseHelp + " | app status: " + statusStyle.Render(statusText))
+		} else {
+			footer = footerStyle.Render(baseHelp)
+		}
 	}
 
 	return lipgloss.JoinVertical(
@@ -506,6 +556,16 @@ func waitForLogLine(lineChan <-chan string) tea.Cmd {
 			return nil
 		}
 		return logLineMsg(line)
+	}
+}
+
+func waitForStatus(statusChan <-chan string) tea.Cmd {
+	return func() tea.Msg {
+		status, ok := <-statusChan
+		if !ok {
+			return nil
+		}
+		return appStatusMsg(status)
 	}
 }
 

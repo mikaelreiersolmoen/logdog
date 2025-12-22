@@ -7,7 +7,7 @@ A text-based interface for viewing and filtering Android logcat logs, built with
 - **Real-time log viewing**: Continuously reads logs from a spawned `adb logcat` process
 - **Application filtering**: Filter logs by application ID via CLI flag
 - **Configurable tail size**: Load recent N entries (default 1000) for fast startup
-- **Vim-like selection mode**: Click to select rows, shift+click to extend selection, `c` to copy messages
+- **Vim-like selection mode**: Click to select rows, ctrl+click (or shift+click) to extend selection, `c` to copy messages
 - **Efficient rendering**: Uses circular buffer, renders only visible rows, and batches updates
 - **Color-coded priority levels**: Visual distinction for Verbose, Debug, Info, Warn, Error, and Fatal logs
 - **Viewport navigation**: Scroll through logs with keyboard controls
@@ -56,7 +56,8 @@ go build -o logdog .
 - `↑`/`↓` or `PgUp`/`PgDn`: Scroll through logs
 - **Selection**:
   - Click on a row to select it
-  - Shift+click on another row to extend selection (selects all rows between)
+  - Ctrl+click (or Shift+click) on another row to extend selection (selects all rows between)
+  - `x`: Toggle extend mode (for terminals like Warp that don't support modifier keys) - next click will extend
   - `c`: Copy selected messages to clipboard
   - `Esc`: Clear selection
 - `l`: Open log level selector
