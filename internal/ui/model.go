@@ -205,7 +205,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case updateViewportMsg:
 		if m.needsUpdate {
-			m.updateViewport()
+			// Disable auto-scroll when in selection mode
+			if m.selectionMode {
+				m.updateViewportWithScroll(false)
+			} else {
+				m.updateViewport()
+			}
 			m.needsUpdate = false
 		}
 		if !m.terminating {
