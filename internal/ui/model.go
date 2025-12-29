@@ -90,6 +90,7 @@ type Model struct {
 	messageOnlySelect bool // true for message-only (v), false for whole-line (V)
 	selectedEntries   map[*logcat.Entry]bool
 	selectionAnchor   *logcat.Entry
+	autoScroll        bool
 }
 
 type Filter struct {
@@ -144,6 +145,7 @@ func NewModel(appID string, tailSize int) Model {
 		messageOnlySelect: false,
 		selectedEntries:   make(map[*logcat.Entry]bool),
 		selectionAnchor:   nil,
+		autoScroll:        true,
 	}
 }
 
@@ -207,12 +209,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case updateViewportMsg:
 		if m.needsUpdate {
-			// Disable auto-scroll when in selection mode
-			if m.selectionMode {
-				m.updateViewportWithScroll(false)
-			} else {
-				m.updateViewport()
-			}
+			m.updateViewportWithScroll(m.autoScroll)
 			m.needsUpdate = false
 		}
 		if !m.terminating {
@@ -295,13 +292,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.clearSelection()
 				}
 				m.highlightedEntry = nil
+				m.autoScroll = true
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "v": // v to enter message-only selection mode
+				m.autoScroll = false
 				m.enterSelectionMode(true)
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "V": // Shift+v to enter whole-line selection mode
+				m.autoScroll = false
 				m.enterSelectionMode(false)
 				m.updateViewportWithScroll(false)
 				return m, nil
@@ -310,10 +310,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.copySelectedMessages()
 					m.clearSelection()
 					m.selectionMode = false
+					m.autoScroll = true
 					m.updateViewportWithScroll(false)
 				}
 				return m, nil
 			case "j", "down":
+				m.autoScroll = false
 				if m.selectionMode {
 					m.extendSelectionDown()
 				} else {
@@ -322,6 +324,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "k", "up":
+				m.autoScroll = false
 				if m.selectionMode {
 					m.extendSelectionUp()
 				} else {
@@ -334,6 +337,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 	case tea.MouseMsg:
 		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter {
+			m.autoScroll = false
 			m.handleMouseClick(msg.Y)
 			m.updateViewportWithScroll(false)
 			return m, nil
@@ -347,8 +351,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filterInput, cmd = m.filterInput.Update(msg)
 		cmds = append(cmds, cmd)
 	} else {
+		// Track viewport position before update
+		wasAtBottom := m.viewport.AtBottom()
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
+		
+		// Re-enable auto-scroll if user scrolled to bottom
+		if !wasAtBottom && m.viewport.AtBottom() {
+			m.autoScroll = true
+		} else if wasAtBottom && !m.viewport.AtBottom() {
+			// Disable auto-scroll if user scrolled away from bottom
+			m.autoScroll = false
+		}
 	}
 
 	return m, tea.Batch(cmds...)
