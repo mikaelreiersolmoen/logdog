@@ -407,7 +407,7 @@ func (m Model) View() string {
 	appInfo, statusStyle.Render(statusText), logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
 
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color("241")).
 		PaddingLeft(1).
 		Width(m.width)
 
@@ -419,7 +419,7 @@ func (m Model) View() string {
 			Render("Filter: ")
 
 		filterHelp := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+			Foreground(lipgloss.Color("241")).
 			Render(" (comma-separated, tag: prefix for tags | Enter: apply | Esc: cancel)")
 
 		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
