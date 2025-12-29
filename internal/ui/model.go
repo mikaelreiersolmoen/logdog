@@ -402,8 +402,9 @@ func (m Model) View() string {
 			statusText = "disconnected"
 		}
 
+	logLevelStyle := lipgloss.NewStyle().Foreground(m.minLogLevel.Color())
 	header := headerStyle.Render(fmt.Sprintf("app: %s (%s) | log level: %s%s",
-	appInfo, statusStyle.Render(statusText), strings.ToLower(m.minLogLevel.Name()), filterInfo))
+	appInfo, statusStyle.Render(statusText), logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).

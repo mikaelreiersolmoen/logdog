@@ -95,10 +95,10 @@ func (p Priority) Name() string {
 }
 
 // Color returns the lipgloss color for the priority
-func (p Priority) Color() lipgloss.Color {
+func (p Priority) Color() lipgloss.TerminalColor {
 	switch p {
 	case Verbose:
-		return lipgloss.Color("240") // Gray
+		return lipgloss.AdaptiveColor{Light: "240", Dark: "250"} // Lighter gray for dark mode
 	case Debug:
 		return lipgloss.Color("33") // Blue
 	case Info:
