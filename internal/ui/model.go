@@ -364,10 +364,9 @@ func (m Model) View() string {
 	}
 
 	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("39")).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderBottom(true).
+		BorderTop(true).
+		PaddingLeft(1).
 		Width(m.width)
 
 	filterInfo := ""
@@ -380,7 +379,7 @@ func (m Model) View() string {
 				filterStrs = append(filterStrs, f.regex.String())
 			}
 		}
-		filterInfo = " | Filters: " + strings.Join(filterStrs, ", ")
+		filterInfo = " | filters: " + strings.Join(filterStrs, ", ")
 	}
 
 	appInfo := m.appID
@@ -388,13 +387,27 @@ func (m Model) View() string {
 		appInfo = "all"
 	}
 
-	header := headerStyle.Render(fmt.Sprintf("Logdog [app: %s | log level: %s%s]",
-		appInfo, m.minLogLevel.Name(), filterInfo))
+	statusStyle := lipgloss.NewStyle()
+	var statusText string
+	
+	switch m.appStatus {
+		case "running":
+			statusStyle = statusStyle.Foreground(lipgloss.Color("40")) // Green
+			statusText = "running"
+		case "stopped":
+			statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
+			statusText = "disconnected"
+		case "reconnecting":
+			statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
+			statusText = "disconnected"
+		}
+
+	header := headerStyle.Render(fmt.Sprintf("app: %s (%s) | log level: %s%s",
+	appInfo, statusStyle.Render(statusText), strings.ToLower(m.minLogLevel.Name()), filterInfo))
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderTop(true).
+		PaddingLeft(1).
 		Width(m.width)
 
 	var footer string
@@ -418,34 +431,13 @@ func (m Model) View() string {
 		footer = footerStyle.Render(selectionInfo)
 	} else {
 		baseHelp := "q: quit | j/k: highlight | v: select msg | V: select line | l: log level | f: filter"
-
-		// Add app status if filtering by app
-		if m.appID != "" && m.appStatus != "" {
-			statusStyle := lipgloss.NewStyle()
-			var statusText string
-
-			switch m.appStatus {
-			case "running":
-				statusStyle = statusStyle.Foreground(lipgloss.Color("40")) // Green
-				statusText = "running"
-			case "stopped":
-				statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
-				statusText = "disconnected"
-			case "reconnecting":
-				statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
-				statusText = "disconnected"
-			}
-
-			footer = footerStyle.Render(baseHelp + " | app status: " + statusStyle.Render(statusText))
-		} else {
-			footer = footerStyle.Render(baseHelp)
-		}
+		footer = footerStyle.Render(baseHelp)
 	}
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		header,
 		m.viewport.View(),
+		header,
 		footer,
 	)
 }
