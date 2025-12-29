@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Color palette for log priorities
+// Color palette
 var (
 	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "250"}
 	colorDebug   = lipgloss.AdaptiveColor{Light: "33", Dark: "117"}   // Pastel blue
@@ -253,11 +253,68 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// Device represents an ADB device
+type Device struct {
+	Serial string
+	Model  string
+	Status string
+}
+
+// GetDevices returns a list of connected ADB devices
+func GetDevices() ([]Device, error) {
+	cmd := exec.Command("adb", "devices", "-l")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("adb command failed - is Android SDK installed?")
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) <= 1 {
+		return nil, fmt.Errorf("no devices/emulators found")
+	}
+
+	var devices []Device
+	for i := 1; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		// Parse format: "serial device [model:...] ..."
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+
+		device := Device{
+			Serial: parts[0],
+			Status: parts[1],
+		}
+
+		// Extract model from the rest of the line
+		for j := 2; j < len(parts); j++ {
+			if strings.HasPrefix(parts[j], "model:") {
+				device.Model = strings.TrimPrefix(parts[j], "model:")
+				break
+			}
+		}
+
+		if device.Model == "" {
+			device.Model = "Unknown"
+		}
+
+		devices = append(devices, device)
+	}
+
+	return devices, nil
+}
+
 // Manager manages the logcat process
 type Manager struct {
 	cmd             *exec.Cmd
 	scanner         *bufio.Scanner
 	appID           string
+	deviceSerial    string
 	stopChan        chan struct{}
 	monitorStopChan chan struct{}
 	tailSize        int
@@ -280,10 +337,19 @@ func NewManager(appID string, tailSize int) *Manager {
 	}
 }
 
+// SetDevice sets the device serial for this manager
+func (m *Manager) SetDevice(serial string) {
+	m.deviceSerial = serial
+}
+
 // Start starts the logcat process
 func (m *Manager) Start() error {
 	// Build logcat command with app ID filter
-	args := []string{"logcat", "-v", "threadtime", "-T", fmt.Sprintf("%d", m.tailSize)}
+	args := []string{}
+	if m.deviceSerial != "" {
+		args = append(args, "-s", m.deviceSerial)
+	}
+	args = append(args, "logcat", "-v", "threadtime", "-T", fmt.Sprintf("%d", m.tailSize))
 	if m.appID != "" {
 		pid, err := m.getPID()
 		if err != nil {
@@ -331,7 +397,12 @@ func (m *Manager) getPID() (string, error) {
 	}
 	
 	// Get PID
-	cmd = exec.Command("adb", "shell", "pidof", m.appID)
+	args := []string{}
+	if m.deviceSerial != "" {
+		args = append(args, "-s", m.deviceSerial)
+	}
+	args = append(args, "shell", "pidof", m.appID)
+	cmd = exec.Command("adb", args...)
 	output, err = cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", m.appID)
@@ -347,7 +418,12 @@ func (m *Manager) getPID() (string, error) {
 
 // isPIDRunning checks if a PID is still running
 func (m *Manager) isPIDRunning(pid string) bool {
-	cmd := exec.Command("adb", "shell", "ps", "-p", pid)
+	args := []string{}
+	if m.deviceSerial != "" {
+		args = append(args, "-s", m.deviceSerial)
+	}
+	args = append(args, "shell", "ps", "-p", pid)
+	cmd := exec.Command("adb", args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -413,7 +489,11 @@ func (m *Manager) restart() error {
 	}
 
 	// Build new logcat command with updated PID
-	args := []string{"logcat", "-v", "threadtime", "-T", "0"} // Use -T 0 for restarts to avoid duplicates
+	args := []string{}
+	if m.deviceSerial != "" {
+		args = append(args, "-s", m.deviceSerial)
+	}
+	args = append(args, "logcat", "-v", "threadtime", "-T", "0") // Use -T 0 for restarts to avoid duplicates
 	if m.currentPID != "" {
 		args = append(args, "--pid="+m.currentPID)
 	}

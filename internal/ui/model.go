@@ -66,6 +66,39 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	fmt.Fprint(w, fn(str))
 }
 
+type deviceItem logcat.Device
+
+func (i deviceItem) FilterValue() string { return "" }
+
+type deviceDelegate struct{}
+
+func (d deviceDelegate) Height() int                             { return 1 }
+func (d deviceDelegate) Spacing() int                            { return 0 }
+func (d deviceDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(deviceItem)
+	if !ok {
+		return
+	}
+
+	device := logcat.Device(i)
+	str := fmt.Sprintf("%s - %s", device.Serial, device.Model)
+
+	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"})
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
+
 type Model struct {
 	viewport         viewport.Model
 	buffer           *buffer.RingBuffer
@@ -91,6 +124,9 @@ type Model struct {
 	selectedEntries   map[*logcat.Entry]bool
 	selectionAnchor   *logcat.Entry
 	autoScroll        bool
+	showDeviceSelect  bool
+	deviceList        list.Model
+	devices           []logcat.Device
 }
 
 type Filter struct {
@@ -127,6 +163,55 @@ func NewModel(appID string, tailSize int) Model {
 	filterInput.CharLimit = 500
 	filterInput.Width = 80
 
+	// Check for multiple devices
+	devices, err := logcat.GetDevices()
+	showDeviceSelect := false
+	var deviceList list.Model
+	
+	if err == nil && len(devices) > 1 {
+		// Multiple devices - show device selector
+		showDeviceSelect = true
+		deviceItems := make([]list.Item, len(devices))
+		for i, device := range devices {
+			deviceItems[i] = deviceItem(device)
+		}
+		deviceList = list.New(deviceItems, deviceDelegate{}, 50, len(devices)+4)
+		deviceList.Title = "Select device"
+		deviceList.SetShowStatusBar(false)
+		deviceList.SetFilteringEnabled(false)
+		deviceList.SetShowPagination(false)
+		deviceList.Styles.Title = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
+			Padding(0, 1)
+	} else if err == nil && len(devices) == 1 {
+		// Single device - use it automatically
+		logManager := logcat.NewManager(appID, tailSize)
+		logManager.SetDevice(devices[0].Serial)
+		return Model{
+			appID:            appID,
+			buffer:           buffer.NewRingBuffer(10000),
+			logManager:       logManager,
+			lineChan:         make(chan string, 100),
+			showLogLevel:     false,
+			logLevelList:     logLevelList,
+			minLogLevel:      logcat.Verbose,
+			showFilter:       false,
+			filterInput:       filterInput,
+			filters:           []Filter{},
+			parsedEntries:     make([]*logcat.Entry, 0, 10000),
+			needsUpdate:       false,
+			highlightedEntry:  nil,
+			selectionMode:     false,
+			messageOnlySelect: false,
+			selectedEntries:   make(map[*logcat.Entry]bool),
+			selectionAnchor:   nil,
+			autoScroll:        true,
+			showDeviceSelect:  false,
+			devices:           devices,
+		}
+	}
+
 	return Model{
 		appID:            appID,
 		buffer:           buffer.NewRingBuffer(10000),
@@ -146,10 +231,18 @@ func NewModel(appID string, tailSize int) Model {
 		selectedEntries:   make(map[*logcat.Entry]bool),
 		selectionAnchor:   nil,
 		autoScroll:        true,
+		showDeviceSelect:  showDeviceSelect,
+		deviceList:        deviceList,
+		devices:           devices,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
+	// If showing device selector, don't start logcat yet
+	if m.showDeviceSelect {
+		return nil
+	}
+	
 	cmds := []tea.Cmd{
 		startLogcat(m.logManager, m.lineChan),
 		waitForLogLine(m.lineChan),
@@ -217,7 +310,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
-		if m.showLogLevel {
+		if m.showDeviceSelect {
+			switch msg.String() {
+			case "q", "ctrl+c", "esc":
+				m.terminating = true
+				return m, tea.Quit
+			case "enter":
+				if i, ok := m.deviceList.SelectedItem().(deviceItem); ok {
+					device := logcat.Device(i)
+					m.logManager.SetDevice(device.Serial)
+					m.showDeviceSelect = false
+					// Start logcat now that device is selected
+					return m, tea.Batch(
+						startLogcat(m.logManager, m.lineChan),
+						waitForLogLine(m.lineChan),
+						tickViewportUpdate(),
+						func() tea.Msg {
+							if m.appID != "" {
+								return waitForStatus(m.logManager.StatusChan())()
+							}
+							return nil
+						},
+					)
+				}
+				return m, nil
+			}
+		} else if m.showLogLevel {
 			switch msg.String() {
 			case "esc":
 				m.showLogLevel = false
@@ -336,7 +454,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		
 	case tea.MouseMsg:
-		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter {
+		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect {
 			m.autoScroll = false
 			m.handleMouseClick(msg.Y)
 			m.updateViewportWithScroll(false)
@@ -344,7 +462,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.showLogLevel {
+	if m.showDeviceSelect {
+		m.deviceList, cmd = m.deviceList.Update(msg)
+		cmds = append(cmds, cmd)
+	} else if m.showLogLevel {
 		m.logLevelList, cmd = m.logLevelList.Update(msg)
 		cmds = append(cmds, cmd)
 	} else if m.showFilter {
@@ -369,6 +490,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.showDeviceSelect {
+		return "\n" + m.deviceList.View()
+	}
+
 	if !m.ready {
 		return "\n  Initializing..."
 	}
