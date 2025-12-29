@@ -10,29 +10,51 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Color palette
+// Color palette for log levels
 var (
-	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "250"}
-	colorDebug   = lipgloss.AdaptiveColor{Light: "33", Dark: "117"}   // Pastel blue
-	colorInfo    = lipgloss.AdaptiveColor{Light: "71", Dark: "114"}   // Pastel green
-	colorWarn    = lipgloss.AdaptiveColor{Light: "172", Dark: "215"}  // Pastel orange/yellow
-	colorError   = lipgloss.AdaptiveColor{Light: "160", Dark: "204"}  // Pastel red
-	colorFatal   = lipgloss.AdaptiveColor{Light: "168", Dark: "213"}  // Pastel magenta
+	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "247"}  // Very subtle gray
+	colorDebug   = lipgloss.AdaptiveColor{Light: "30", Dark: "116"}   // Moderate teal
+	colorInfo    = lipgloss.AdaptiveColor{Light: "28", Dark: "114"}   // Vibrant green
+	colorWarn    = lipgloss.AdaptiveColor{Light: "130", Dark: "178"}  // Subtle orange
+	colorError   = lipgloss.AdaptiveColor{Light: "124", Dark: "210"}  // Subtle red
+	colorFatal   = lipgloss.AdaptiveColor{Light: "126", Dark: "182"}  // Subtle magenta
 	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}    // Black/White
 )
 
+// Getter functions for colors
+func GetVerboseColor() lipgloss.TerminalColor { return colorVerbose }
+func GetDebugColor() lipgloss.TerminalColor   { return colorDebug }
+func GetInfoColor() lipgloss.TerminalColor    { return colorInfo }
+func GetWarnColor() lipgloss.TerminalColor    { return colorWarn }
+func GetErrorColor() lipgloss.TerminalColor   { return colorError }
+func GetFatalColor() lipgloss.TerminalColor   { return colorFatal }
+
 // Color palette for tags - pastel colors that don't overlap with log levels
 var tagColors = []lipgloss.AdaptiveColor{
-	{Light: "75", Dark: "123"},   // Pastel teal
-	{Light: "140", Dark: "183"},  // Pastel purple
-	{Light: "180", Dark: "222"},  // Pastel peach
-	{Light: "108", Dark: "151"},  // Pastel lime
-	{Light: "146", Dark: "189"},  // Pastel lavender
-	{Light: "79", Dark: "122"},   // Pastel cyan
-	{Light: "139", Dark: "182"},  // Pastel violet
-	{Light: "173", Dark: "217"},  // Pastel tan
-	{Light: "109", Dark: "152"},  // Pastel mint
-	{Light: "147", Dark: "190"},  // Pastel mauve
+	{Light: "30", Dark: "123"},   // Pastel teal
+	{Light: "91", Dark: "183"},   // Pastel purple
+	{Light: "130", Dark: "222"},  // Pastel peach
+	{Light: "64", Dark: "151"},   // Pastel lime
+	{Light: "97", Dark: "189"},   // Pastel lavender
+	{Light: "37", Dark: "122"},   // Pastel cyan
+	{Light: "90", Dark: "182"},   // Pastel violet
+	{Light: "131", Dark: "217"},  // Pastel tan
+	{Light: "65", Dark: "152"},   // Pastel mint
+	{Light: "98", Dark: "190"},   // Pastel mauve
+}
+
+// Color palette for filter badges - very subtle muted colors
+var filterColors = []lipgloss.AdaptiveColor{
+	{Light: "109", Dark: "102"},  // Muted teal-gray
+	{Light: "146", Dark: "139"},  // Muted purple-gray
+	{Light: "181", Dark: "174"},  // Muted peach-gray
+	{Light: "144", Dark: "108"},  // Muted lime-gray
+	{Light: "182", Dark: "145"},  // Muted lavender-gray
+	{Light: "116", Dark: "109"},  // Muted cyan-gray
+	{Light: "140", Dark: "139"},  // Muted violet-gray
+	{Light: "180", Dark: "144"},  // Muted tan-gray
+	{Light: "151", Dark: "108"},  // Muted mint-gray
+	{Light: "183", Dark: "146"},  // Muted mauve-gray
 }
 
 // Priority represents logcat priority levels
@@ -119,26 +141,6 @@ func (p Priority) Name() string {
 	}
 }
 
-// Color returns the lipgloss color for the priority
-func (p Priority) Color() lipgloss.TerminalColor {
-	switch p {
-	case Verbose:
-		return colorVerbose
-	case Debug:
-		return colorDebug
-	case Info:
-		return colorInfo
-	case Warn:
-		return colorWarn
-	case Error:
-		return colorError
-	case Fatal:
-		return colorFatal
-	default:
-		return colorDefault
-	}
-}
-
 // TagColor returns a consistent color for a given tag name
 func TagColor(tag string) lipgloss.TerminalColor {
 	if tag == "" {
@@ -153,6 +155,22 @@ func TagColor(tag string) lipgloss.TerminalColor {
 	
 	colorIndex := int(hash) % len(tagColors)
 	return tagColors[colorIndex]
+}
+
+// FilterColor returns a consistent color for filter badges (more subtle than tag colors)
+func FilterColor(filterText string) lipgloss.TerminalColor {
+	if filterText == "" {
+		return colorDefault
+	}
+	
+	// Simple hash function to map filter to color index
+	var hash uint32
+	for i := 0; i < len(filterText); i++ {
+		hash = hash*31 + uint32(filterText[i])
+	}
+	
+	colorIndex := int(hash) % len(filterColors)
+	return filterColors[colorIndex]
 }
 
 // ParseLine parses a logcat line in threadtime format
@@ -224,12 +242,36 @@ func (e *Entry) FormatWithTag(style lipgloss.Style, showTag bool) string {
 
 // FormatWithTagAndMessageStyle returns a formatted string with separate style for message
 func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool, messageStyle lipgloss.Style) string {
+	// Get subtle color based on log level
+	var subtleColor lipgloss.TerminalColor
+	switch e.Priority {
+	case Verbose:
+		subtleColor = colorVerbose
+	case Debug:
+		subtleColor = colorDebug
+	case Info:
+		subtleColor = colorInfo
+	case Warn:
+		subtleColor = colorWarn
+	case Error:
+		subtleColor = colorError
+	case Fatal:
+		subtleColor = colorFatal
+	default:
+		subtleColor = colorDefault
+	}
+
+	// Priority indicator uses subtle color
 	priorityStyle := lipgloss.NewStyle().
-		Foreground(e.Priority.Color()).
+		Foreground(subtleColor).
 		Bold(true)
 
+	// Tag uses hash-based color
 	tagStyle := lipgloss.NewStyle().
 		Foreground(TagColor(e.Tag))
+	
+	// Message uses subtle color
+	messageStyle = messageStyle.Foreground(subtleColor)
 
 	var tagStr string
 	if showTag {

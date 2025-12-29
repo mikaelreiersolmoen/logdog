@@ -53,8 +53,27 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	
 	str := fmt.Sprintf("(%s) %s", shortcut, priority.Name())
 
+	// Get subtle message color for this priority
+	var subtleColor lipgloss.TerminalColor
+	switch priority {
+	case logcat.Verbose:
+		subtleColor = logcat.GetVerboseColor()
+	case logcat.Debug:
+		subtleColor = logcat.GetDebugColor()
+	case logcat.Info:
+		subtleColor = logcat.GetInfoColor()
+	case logcat.Warn:
+		subtleColor = logcat.GetWarnColor()
+	case logcat.Error:
+		subtleColor = logcat.GetErrorColor()
+	case logcat.Fatal:
+		subtleColor = logcat.GetFatalColor()
+	default:
+		subtleColor = logcat.GetVerboseColor()
+	}
+
 	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(2).Foreground(priority.Color())
+	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(2).Foreground(subtleColor)
 
 	fn := itemStyle.Render
 	if index == m.Index() {
@@ -214,6 +233,7 @@ func NewModel(appID string, tailSize int) Model {
 			selectionAnchor:   nil,
 			autoScroll:        true,
 			showDeviceSelect:  false,
+			deviceList:        list.Model{},
 			devices:           devices,
 			selectedDevice:    devices[0].Model,
 		}
@@ -522,6 +542,11 @@ func (m Model) View() string {
 	headerStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderTop(true).
+		BorderBottom(true).
+		PaddingLeft(1).
+		Width(m.width)
+
+	headerStyleNoBorder := lipgloss.NewStyle().
 		PaddingLeft(1).
 		Width(m.width)
 
@@ -529,13 +554,23 @@ func (m Model) View() string {
 	if len(m.filters) > 0 {
 		var filterStrs []string
 		for _, f := range m.filters {
+			var filterText string
 			if f.isTag {
-				filterStrs = append(filterStrs, "tag:"+f.regex.String())
+				filterText = "tag:" + f.regex.String()
 			} else {
-				filterStrs = append(filterStrs, f.regex.String())
+				filterText = f.regex.String()
 			}
+			
+			// Use filter colors for filter badges
+			filterColor := logcat.FilterColor(filterText)
+			filterBadge := lipgloss.NewStyle().
+				Background(filterColor).
+				Foreground(lipgloss.AdaptiveColor{Light: "0", Dark: "0"}).
+				Padding(0, 1).
+				Render(filterText)
+			filterStrs = append(filterStrs, filterBadge)
 		}
-		filterInfo = " | filters: " + strings.Join(filterStrs, ", ")
+		filterInfo = " | filters: " + strings.Join(filterStrs, " ")
 	}
 
 	appInfo := m.appID
@@ -558,7 +593,26 @@ func (m Model) View() string {
 		statusText = "disconnected"
 	}
 
-	logLevelStyle := lipgloss.NewStyle().Foreground(m.minLogLevel.Color())
+	// Get color for current log level
+	var logLevelColor lipgloss.TerminalColor
+	switch m.minLogLevel {
+	case logcat.Verbose:
+		logLevelColor = logcat.GetVerboseColor()
+	case logcat.Debug:
+		logLevelColor = logcat.GetDebugColor()
+	case logcat.Info:
+		logLevelColor = logcat.GetInfoColor()
+	case logcat.Warn:
+		logLevelColor = logcat.GetWarnColor()
+	case logcat.Error:
+		logLevelColor = logcat.GetErrorColor()
+	case logcat.Fatal:
+		logLevelColor = logcat.GetFatalColor()
+	default:
+		logLevelColor = logcat.GetVerboseColor()
+	}
+
+	logLevelStyle := lipgloss.NewStyle().Foreground(logLevelColor)
 
 	// Build header lines
 	var headerLines []string
@@ -568,8 +622,8 @@ func (m Model) View() string {
 		logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo)
 	headerLines = append(headerLines, headerStyle.Render(logLevelLine))
 	
-	// Second line: app and device info (if applicable)
-	if m.appID != "" || (len(m.devices) > 1 && m.selectedDevice != "") {
+	// Second line: app and device info (if applicable and not showing filter)
+	if !m.showFilter && (m.appID != "" || (len(m.devices) > 1 && m.selectedDevice != "")) {
 		var infoParts []string
 		if m.appID != "" {
 			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appInfo, statusStyle.Render(statusText)))
@@ -579,13 +633,20 @@ func (m Model) View() string {
 		}
 		if len(infoParts) > 0 {
 			infoLine := strings.Join(infoParts, " | ")
-			headerLines = append(headerLines, headerStyle.Render(infoLine))
+			headerLines = append(headerLines, headerStyleNoBorder.Render(infoLine))
 		}
 	}
 	
 	header := lipgloss.JoinVertical(lipgloss.Left, headerLines...)
 
 	footerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderTop(true).
+		PaddingLeft(1).
+		Width(m.width)
+
+	footerStyleNoBorder := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		PaddingLeft(1).
 		Width(m.width)
@@ -601,7 +662,7 @@ func (m Model) View() string {
 			Foreground(lipgloss.Color("241")).
 			Render("(comma-separated, tag: prefix for tags | enter: apply | esc: cancel)")
 
-		filterLine := footerStyle.Render(filterLabel + m.filterInput.View())
+		filterLine := footerStyleNoBorder.Render(filterLabel + m.filterInput.View())
 		helpLine := footerStyle.Render(filterHelp)
 		footer = lipgloss.JoinVertical(lipgloss.Left, filterLine, helpLine)
 	} else if m.selectionMode {
@@ -671,8 +732,27 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 
 // formatEntryWithBackground formats an entry with background color applied to all parts
 func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style) string {
+	// Get color for this priority
+	var priorityColor lipgloss.TerminalColor
+	switch entry.Priority {
+	case logcat.Verbose:
+		priorityColor = logcat.GetVerboseColor()
+	case logcat.Debug:
+		priorityColor = logcat.GetDebugColor()
+	case logcat.Info:
+		priorityColor = logcat.GetInfoColor()
+	case logcat.Warn:
+		priorityColor = logcat.GetWarnColor()
+	case logcat.Error:
+		priorityColor = logcat.GetErrorColor()
+	case logcat.Fatal:
+		priorityColor = logcat.GetFatalColor()
+	default:
+		priorityColor = logcat.GetVerboseColor()
+	}
+
 	priorityStyle := lipgloss.NewStyle().
-		Foreground(entry.Priority.Color()).
+		Foreground(priorityColor).
 		Background(bgStyle.GetBackground()).
 		Bold(true)
 
