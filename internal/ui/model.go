@@ -119,7 +119,7 @@ func NewModel(appID string, tailSize int) Model {
 	logLevelList.SetShowPagination(false)
 	logLevelList.Styles.Title = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("39")).
+		Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
 		Padding(0, 1)
 
 	filterInput := textinput.New()
@@ -405,20 +405,29 @@ func (m Model) View() string {
 	var statusText string
 	
 	switch m.appStatus {
-		case "running":
-			statusStyle = statusStyle.Foreground(lipgloss.Color("40")) // Green
-			statusText = "running"
-		case "stopped":
-			statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
-			statusText = "disconnected"
-		case "reconnecting":
-			statusStyle = statusStyle.Foreground(lipgloss.Color("214")) // Orange
-			statusText = "disconnected"
-		}
+	case "running":
+		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "71", Dark: "114"}) // Green
+		statusText = "running"
+	case "stopped":
+		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
+		statusText = "disconnected"
+	case "reconnecting":
+		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
+		statusText = "disconnected"
+	}
 
 	logLevelStyle := lipgloss.NewStyle().Foreground(m.minLogLevel.Color())
-	header := headerStyle.Render(fmt.Sprintf("app: %s (%s) | log level: %s%s",
-	appInfo, statusStyle.Render(statusText), logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
+
+	var header string
+	if m.appID == "" {
+		// No specific app - just show log level
+		header = headerStyle.Render(fmt.Sprintf("log level: %s%s",
+			logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
+	} else {
+		// Specific app - show app, status, and log level
+		header = headerStyle.Render(fmt.Sprintf("app: %s (%s) | log level: %s%s",
+			appInfo, statusStyle.Render(statusText), logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
+	}
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
@@ -428,24 +437,26 @@ func (m Model) View() string {
 	var footer string
 	if m.showFilter {
 		filterLabel := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")).
+			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
 			Bold(true).
-			Render("Filter: ")
+			Render("filter: ")
 
 		filterHelp := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render(" (comma-separated, tag: prefix for tags | Enter: apply | Esc: cancel)")
+			Render("(comma-separated, tag: prefix for tags | enter: apply | esc: cancel)")
 
-		footer = footerStyle.Render(filterLabel + m.filterInput.View() + filterHelp)
+		filterLine := footerStyle.Render(filterLabel + m.filterInput.View())
+		helpLine := footerStyle.Render(filterHelp)
+		footer = lipgloss.JoinVertical(lipgloss.Left, filterLine, helpLine)
 	} else if m.selectionMode {
 		modeType := "WHOLE-LINE"
 		if m.messageOnlySelect {
 			modeType = "MESSAGE"
 		}
-		selectionInfo := fmt.Sprintf("%s SELECTION | %d lines | j/k: extend | v/V: switch mode | c: copy | Esc: exit", modeType, len(m.selectedEntries))
+		selectionInfo := fmt.Sprintf("%s SELECTION | %d lines | j/k: extend | v/V: switch mode | c: copy | esc: exit", modeType, len(m.selectedEntries))
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | j/k: highlight | v: select msg | V: select line | l: log level | f: filter"
+		baseHelp := "q: quit | j/k: highlight | v: select msg | V: select line | l: set log level | f: edit filter"
 		footer = footerStyle.Render(baseHelp)
 	}
 
