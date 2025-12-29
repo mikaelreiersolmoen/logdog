@@ -19,14 +19,25 @@ func main() {
 	flag.IntVar(&tailSize, "t", 1000, "Number of recent log entries to load initially (shorthand)")
 	flag.Parse()
 
-	// Validate connectivity before starting UI (only if app filtering is requested)
+	// Validate connectivity before starting UI (only if app filtering is requested and single device)
 	if appID != "" {
-		logManager := logcat.NewManager(appID, tailSize)
-		if err := logManager.Start(); err != nil {
+		// Check device count first
+		devices, err := logcat.GetDevices()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		logManager.Stop()
+		
+		// Only validate if single device (multi-device validation happens after selection)
+		if len(devices) == 1 {
+			logManager := logcat.NewManager(appID, tailSize)
+			logManager.SetDevice(devices[0].Serial)
+			if err := logManager.Start(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			logManager.Stop()
+		}
 	}
 
 	m := ui.NewModel(appID, tailSize)
@@ -37,8 +48,15 @@ func main() {
 		tea.WithMouseCellMotion(),
 	)
 
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Printf("Error running program: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if the model has an error message to display
+	if finalModel, ok := finalModel.(ui.Model); ok && finalModel.ErrorMessage() != "" {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", finalModel.ErrorMessage())
 		os.Exit(1)
 	}
 }

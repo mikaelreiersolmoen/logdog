@@ -128,7 +128,12 @@ type Model struct {
 	deviceList        list.Model
 	devices           []logcat.Device
 	selectedDevice    string // Device serial or model
+	errorMessage      string
 }
+
+type errMsg struct{ err error }
+
+func (e errMsg) Error() string { return e.err.Error() }
 
 type Filter struct {
 	isTag bool
@@ -308,13 +313,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case updateViewportMsg:
-		if m.needsUpdate {
+		if m.needsUpdate && m.ready {
 			m.updateViewportWithScroll(m.autoScroll)
 			m.needsUpdate = false
 		}
 		if !m.terminating {
 			cmds = append(cmds, tickViewportUpdate())
 		}
+
+	case errMsg:
+		// Handle errors from logcat start
+		m.errorMessage = msg.Error()
+		m.terminating = true
+		return m, tea.Quit
 
 	case tea.KeyMsg:
 		if m.showDeviceSelect {
@@ -329,17 +340,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectedDevice = device.Model
 					m.showDeviceSelect = false
 					// Start logcat now that device is selected
-					return m, tea.Batch(
+					cmds := []tea.Cmd{
 						startLogcat(m.logManager, m.lineChan),
 						waitForLogLine(m.lineChan),
 						tickViewportUpdate(),
-						func() tea.Msg {
-							if m.appID != "" {
-								return waitForStatus(m.logManager.StatusChan())()
-							}
-							return nil
-						},
-					)
+					}
+					if m.appID != "" {
+						cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
+					}
+					return m, tea.Batch(cmds...)
 				}
 				return m, nil
 			}
@@ -786,7 +795,7 @@ func (m *Model) matchesFilters(entry *logcat.Entry) bool {
 func startLogcat(manager *logcat.Manager, lineChan chan string) tea.Cmd {
 	return func() tea.Msg {
 		if err := manager.Start(); err != nil {
-			panic(err)
+			return errMsg{err}
 		}
 		go manager.ReadLines(lineChan)
 		return nil
@@ -1083,4 +1092,9 @@ func (m *Model) copySelectedMessages() {
 	cmd := exec.Command("pbcopy")
 	cmd.Stdin = strings.NewReader(clipboard)
 	cmd.Run()
+}
+
+// ErrorMessage returns any error message from the model
+func (m Model) ErrorMessage() string {
+	return m.errorMessage
 }
