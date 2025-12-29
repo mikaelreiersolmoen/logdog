@@ -127,6 +127,7 @@ type Model struct {
 	showDeviceSelect  bool
 	deviceList        list.Model
 	devices           []logcat.Device
+	selectedDevice    string // Device serial or model
 }
 
 type Filter struct {
@@ -209,6 +210,7 @@ func NewModel(appID string, tailSize int) Model {
 			autoScroll:        true,
 			showDeviceSelect:  false,
 			devices:           devices,
+			selectedDevice:    devices[0].Model,
 		}
 	}
 
@@ -234,6 +236,7 @@ func NewModel(appID string, tailSize int) Model {
 		showDeviceSelect:  showDeviceSelect,
 		deviceList:        deviceList,
 		devices:           devices,
+		selectedDevice:    "",
 	}
 }
 
@@ -263,7 +266,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		headerHeight := 3
+		// Calculate header height based on what will be shown
+		headerHeight := 3 // Base header (log level line + border)
+		if m.appID != "" || (len(m.devices) > 1 && m.selectedDevice != "") {
+			headerHeight += 1 // Add line for app/device info
+		}
 		footerHeight := 2
 		verticalMargin := headerHeight + footerHeight
 
@@ -319,6 +326,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if i, ok := m.deviceList.SelectedItem().(deviceItem); ok {
 					device := logcat.Device(i)
 					m.logManager.SetDevice(device.Serial)
+					m.selectedDevice = device.Model
 					m.showDeviceSelect = false
 					// Start logcat now that device is selected
 					return m, tea.Batch(
@@ -543,16 +551,30 @@ func (m Model) View() string {
 
 	logLevelStyle := lipgloss.NewStyle().Foreground(m.minLogLevel.Color())
 
-	var header string
-	if m.appID == "" {
-		// No specific app - just show log level
-		header = headerStyle.Render(fmt.Sprintf("log level: %s%s",
-			logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
-	} else {
-		// Specific app - show app, status, and log level
-		header = headerStyle.Render(fmt.Sprintf("app: %s (%s) | log level: %s%s",
-			appInfo, statusStyle.Render(statusText), logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo))
+	// Build header lines
+	var headerLines []string
+	
+	// First line: log level and filters
+	logLevelLine := fmt.Sprintf("log level: %s%s",
+		logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo)
+	headerLines = append(headerLines, headerStyle.Render(logLevelLine))
+	
+	// Second line: app and device info (if applicable)
+	if m.appID != "" || (len(m.devices) > 1 && m.selectedDevice != "") {
+		var infoParts []string
+		if m.appID != "" {
+			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appInfo, statusStyle.Render(statusText)))
+		}
+		if len(m.devices) > 1 && m.selectedDevice != "" {
+			infoParts = append(infoParts, fmt.Sprintf("device: %s", m.selectedDevice))
+		}
+		if len(infoParts) > 0 {
+			infoLine := strings.Join(infoParts, " | ")
+			headerLines = append(headerLines, headerStyle.Render(infoLine))
+		}
 	}
+	
+	header := lipgloss.JoinVertical(lipgloss.Left, headerLines...)
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
