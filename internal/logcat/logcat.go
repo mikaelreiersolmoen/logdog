@@ -10,6 +10,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Color palette for log priorities
+var (
+	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "250"}
+	colorDebug   = lipgloss.AdaptiveColor{Light: "33", Dark: "117"}   // Pastel blue
+	colorInfo    = lipgloss.AdaptiveColor{Light: "71", Dark: "114"}   // Pastel green
+	colorWarn    = lipgloss.AdaptiveColor{Light: "172", Dark: "215"}  // Pastel orange/yellow
+	colorError   = lipgloss.AdaptiveColor{Light: "160", Dark: "204"}  // Pastel red
+	colorFatal   = lipgloss.AdaptiveColor{Light: "168", Dark: "213"}  // Pastel magenta
+	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}    // Black/White
+)
+
 // Priority represents logcat priority levels
 type Priority int
 
@@ -98,19 +109,19 @@ func (p Priority) Name() string {
 func (p Priority) Color() lipgloss.TerminalColor {
 	switch p {
 	case Verbose:
-		return lipgloss.AdaptiveColor{Light: "240", Dark: "250"} // Lighter gray for dark mode
+		return colorVerbose
 	case Debug:
-		return lipgloss.Color("33") // Blue
+		return colorDebug
 	case Info:
-		return lipgloss.Color("40") // Green
+		return colorInfo
 	case Warn:
-		return lipgloss.Color("214") // Orange
+		return colorWarn
 	case Error:
-		return lipgloss.Color("196") // Red
+		return colorError
 	case Fatal:
-		return lipgloss.Color("201") // Magenta
+		return colorFatal
 	default:
-		return lipgloss.Color("255") // White
+		return colorDefault
 	}
 }
 
