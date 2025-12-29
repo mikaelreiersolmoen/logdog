@@ -21,6 +21,20 @@ var (
 	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}    // Black/White
 )
 
+// Color palette for tags - pastel colors that don't overlap with log levels
+var tagColors = []lipgloss.AdaptiveColor{
+	{Light: "75", Dark: "123"},   // Pastel teal
+	{Light: "140", Dark: "183"},  // Pastel purple
+	{Light: "180", Dark: "222"},  // Pastel peach
+	{Light: "108", Dark: "151"},  // Pastel lime
+	{Light: "146", Dark: "189"},  // Pastel lavender
+	{Light: "79", Dark: "122"},   // Pastel cyan
+	{Light: "139", Dark: "182"},  // Pastel violet
+	{Light: "173", Dark: "217"},  // Pastel tan
+	{Light: "109", Dark: "152"},  // Pastel mint
+	{Light: "147", Dark: "190"},  // Pastel mauve
+}
+
 // Priority represents logcat priority levels
 type Priority int
 
@@ -125,6 +139,22 @@ func (p Priority) Color() lipgloss.TerminalColor {
 	}
 }
 
+// TagColor returns a consistent color for a given tag name
+func TagColor(tag string) lipgloss.TerminalColor {
+	if tag == "" {
+		return colorDefault
+	}
+	
+	// Simple hash function to map tag to color index
+	var hash uint32
+	for i := 0; i < len(tag); i++ {
+		hash = hash*31 + uint32(tag[i])
+	}
+	
+	colorIndex := int(hash) % len(tagColors)
+	return tagColors[colorIndex]
+}
+
 // ParseLine parses a logcat line in threadtime format
 // Format: MM-DD HH:MM:SS.mmm PID TID P TAG: MESSAGE
 func ParseLine(line string) (*Entry, error) {
@@ -199,7 +229,7 @@ func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool,
 		Bold(true)
 
 	tagStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("45")) // Cyan
+		Foreground(TagColor(e.Tag))
 
 	var tagStr string
 	if showTag {

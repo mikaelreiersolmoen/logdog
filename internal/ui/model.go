@@ -496,7 +496,7 @@ func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgS
 		Bold(true)
 
 	tagStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("45")).
+		Foreground(logcat.TagColor(entry.Tag)).
 		Background(bgStyle.GetBackground())
 	
 	messageStyle := lipgloss.NewStyle().
