@@ -478,7 +478,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.clearSelection()
 				}
 				m.highlightedEntry = nil
-				m.autoScroll = true
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "v": // v to enter selection mode
@@ -1070,6 +1069,31 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 	}
 }
 
+// ensureLineVisible scrolls the viewport to ensure the line at the given index is visible
+func (m *Model) ensureLineVisible(lineNumber int) {
+	visible := m.getVisibleEntries()
+	if len(visible) == 0 || lineNumber < 0 || lineNumber >= len(visible) {
+		return
+	}
+
+	viewportTop := m.viewport.YOffset
+	viewportBottom := m.viewport.YOffset + m.viewport.Height - 1
+
+	// If line is above viewport, scroll up to show it
+	if lineNumber < viewportTop {
+		m.viewport.SetYOffset(lineNumber)
+	}
+
+	// If line is below viewport, scroll down to show it at the bottom
+	if lineNumber > viewportBottom {
+		newOffset := lineNumber - m.viewport.Height + 1
+		if newOffset < 0 {
+			newOffset = 0
+		}
+		m.viewport.SetYOffset(newOffset)
+	}
+}
+
 // ensureEntryVisible scrolls the viewport to ensure the given entry is visible,
 // positioning it roughly in the center to allow movement in both directions
 func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
@@ -1231,7 +1255,10 @@ func (m *Model) extendSelectionDown() {
 		delete(m.selectedEntries, visible[highestIdx])
 	} else if lowestIdx < len(visible)-1 {
 		// Otherwise extend downward
-		m.selectedEntries[visible[lowestIdx+1]] = true
+		newEntry := visible[lowestIdx+1]
+		m.selectedEntries[newEntry] = true
+		// Scroll to ensure the new entry is visible
+		m.ensureLineVisible(lowestIdx + 1)
 	}
 }
 
@@ -1269,7 +1296,10 @@ func (m *Model) extendSelectionUp() {
 		delete(m.selectedEntries, visible[lowestIdx])
 	} else if highestIdx > 0 {
 		// Otherwise extend upward
-		m.selectedEntries[visible[highestIdx-1]] = true
+		newEntry := visible[highestIdx-1]
+		m.selectedEntries[newEntry] = true
+		// Scroll to ensure the new entry is visible
+		m.ensureLineVisible(highestIdx - 1)
 	}
 }
 
