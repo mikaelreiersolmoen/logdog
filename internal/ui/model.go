@@ -18,7 +18,7 @@ import (
 )
 
 // UI accent color used in headers and selected items
-var accentColor = lipgloss.AdaptiveColor{Light: "33", Dark: "117"}
+var accentColor = lipgloss.AdaptiveColor{Light: "33", Dark: "110"}
 
 type logLevelItem logcat.Priority
 
@@ -666,13 +666,15 @@ func (m Model) View() string {
 	// Second line: app and device info (always show)
 	if !m.showFilter && !m.showClearConfirm {
 		var infoParts []string
+		appStyle := lipgloss.NewStyle().Foreground(accentColor)
+		deviceStyle := lipgloss.NewStyle().Foreground(accentColor)
 		if m.appID != "" {
-			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appInfo, statusStyle.Render(statusText)))
+			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appStyle.Render(appInfo), statusStyle.Render(statusText)))
 		} else {
 			infoParts = append(infoParts, "app: all")
 		}
 		if m.selectedDevice != "" {
-			infoParts = append(infoParts, fmt.Sprintf("device: %s", m.selectedDevice))
+			infoParts = append(infoParts, fmt.Sprintf("device: %s", deviceStyle.Render(m.selectedDevice)))
 		}
 		infoLine := strings.Join(infoParts, " | ")
 		headerLines = append(headerLines, headerStyleNoBorder.Render(infoLine))
@@ -695,7 +697,7 @@ func (m Model) View() string {
 	var footer string
 	if m.showFilter {
 		filterLabel := lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
+			Foreground(accentColor).
 			Bold(true).
 			Render("filter: ")
 
@@ -708,7 +710,7 @@ func (m Model) View() string {
 		footer = lipgloss.JoinVertical(lipgloss.Left, filterLine, helpLine)
 	} else if m.showClearConfirm {
 		clearLabel := lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
+			Foreground(accentColor).
 			Bold(true).
 			Render("clear log? ")
 

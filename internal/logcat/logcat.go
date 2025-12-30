@@ -14,11 +14,11 @@ import (
 // Color palette for log levels
 var (
 	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "247"} // Very subtle gray
-	colorDebug   = lipgloss.AdaptiveColor{Light: "30", Dark: "116"}  // Moderate teal
+	colorDebug   = lipgloss.AdaptiveColor{Light: "30", Dark: "109"}  // Moderate teal
 	colorInfo    = lipgloss.AdaptiveColor{Light: "28", Dark: "114"}  // Vibrant green
 	colorWarn    = lipgloss.AdaptiveColor{Light: "130", Dark: "178"} // Subtle orange
 	colorError   = lipgloss.AdaptiveColor{Light: "124", Dark: "210"} // Subtle red
-	colorFatal   = lipgloss.AdaptiveColor{Light: "126", Dark: "182"} // Subtle magenta
+	colorFatal   = lipgloss.AdaptiveColor{Light: "126", Dark: "211"} // Subtle magenta
 	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}   // Black/White
 )
 
