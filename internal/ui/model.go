@@ -17,6 +17,9 @@ import (
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 )
 
+// UI accent color used in headers and selected items
+var accentColor = lipgloss.AdaptiveColor{Light: "33", Dark: "117"}
+
 type logLevelItem logcat.Priority
 
 func (i logLevelItem) FilterValue() string { return "" }
@@ -106,7 +109,7 @@ func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle := lipgloss.NewStyle().
 		PaddingLeft(2).
-		Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"})
+		Foreground(accentColor)
 
 	fn := itemStyle.Render
 	if index == m.Index() {
@@ -182,7 +185,7 @@ func NewModel(appID string, tailSize int) Model {
 	logLevelList.SetShowPagination(false)
 	logLevelList.Styles.Title = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
+		Foreground(accentColor).
 		Padding(0, 1)
 
 	filterInput := textinput.New()
@@ -214,7 +217,7 @@ func NewModel(appID string, tailSize int) Model {
 		deviceList.SetShowPagination(false)
 		deviceList.Styles.Title = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
+			Foreground(accentColor).
 			Padding(0, 1)
 	} else if err == nil && len(devices) == 1 {
 		// Single device - use it automatically
