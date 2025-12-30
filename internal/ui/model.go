@@ -692,6 +692,7 @@ func (m *Model) updateViewport() {
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
+	var lastTimestamp string
 	
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
 	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"}) // Subtle highlight
@@ -700,25 +701,30 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
 			var line string
 
+			// Check if this should be indented (stack trace continuation with same timestamp)
+			shouldIndent := entry.Timestamp == lastTimestamp && 
+				logcat.IsStackTraceLine(entry.Message)
+
 			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
 				// Strong selection style
 				if m.messageOnlySelect {
 					// Message-only: only highlight the message part
-					line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle)
+					line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle, shouldIndent)
 				} else {
 					// Whole-line: highlight everything by passing the background to all parts
-					line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, selectedStyle)
+					line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, selectedStyle, shouldIndent)
 				}
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
-				line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, highlightStyle)
+				line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
 			} else {
-				line = entry.FormatWithTag(lipgloss.NewStyle(), entry.Tag != lastTag)
+				line = entry.FormatWithTagAndIndent(lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent)
 			}
 
 			lines = append(lines, line)
 			lastTag = entry.Tag
+			lastTimestamp = entry.Timestamp
 		}
 	}
 
@@ -731,7 +737,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 }
 
 // formatEntryWithBackground formats an entry with background color applied to all parts
-func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style) string {
+func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, indent bool) string {
 	// Get color for this priority
 	var priorityColor lipgloss.TerminalColor
 	switch entry.Priority {
@@ -773,11 +779,17 @@ func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgS
 		tagStr = bgStyle.Render(strings.Repeat(" ", 20))
 	}
 
+	// Add indentation if requested (for stack traces with matching timestamps)
+	message := entry.Message
+	if indent && logcat.IsStackTraceLine(message) {
+		message = "    " + message
+	}
+
 	return fmt.Sprintf("%s %s %s %s",
 		timestampStyle.Render(entry.Timestamp),
 		priorityStyle.Render(entry.Priority.String()),
 		tagStr,
-		messageStyle.Render(entry.Message),
+		messageStyle.Render(message),
 	)
 }
 

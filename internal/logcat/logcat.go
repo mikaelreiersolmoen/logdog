@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -237,11 +238,16 @@ func (e *Entry) Format(style lipgloss.Style) string {
 
 // FormatWithTag returns a formatted string representation with optional tag display
 func (e *Entry) FormatWithTag(style lipgloss.Style, showTag bool) string {
-	return e.FormatWithTagAndMessageStyle(style, showTag, lipgloss.NewStyle())
+	return e.FormatWithTagAndIndent(style, showTag, false)
+}
+
+// FormatWithTagAndIndent returns a formatted string with optional indentation for stack traces
+func (e *Entry) FormatWithTagAndIndent(style lipgloss.Style, showTag bool, indent bool) string {
+	return e.FormatWithTagAndMessageStyle(style, showTag, lipgloss.NewStyle(), indent)
 }
 
 // FormatWithTagAndMessageStyle returns a formatted string with separate style for message
-func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool, messageStyle lipgloss.Style) string {
+func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool, messageStyle lipgloss.Style, indent bool) string {
 	// Get subtle color based on log level
 	var subtleColor lipgloss.TerminalColor
 	switch e.Priority {
@@ -280,12 +286,30 @@ func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool,
 		tagStr = strings.Repeat(" ", 20)
 	}
 
+	// Add indentation if requested (determined by caller based on timestamp matching)
+	message := e.Message
+	if indent && isStackTraceLine(message) {
+		message = "    " + message // 4 spaces indentation
+	}
+
 	return fmt.Sprintf("%s %s %s %s",
 		e.Timestamp,
 		priorityStyle.Render(e.Priority.String()),
 		tagStr,
-		messageStyle.Render(e.Message),
+		messageStyle.Render(message),
 	)
+}
+
+var stackTraceRegex = regexp.MustCompile(`^at\s+[\w.$]+`)
+
+// IsStackTraceLine checks if a message is a stack trace line (exported for use in UI)
+func IsStackTraceLine(message string) bool {
+	return isStackTraceLine(message)
+}
+
+// isStackTraceLine checks if a message is a stack trace line (internal)
+func isStackTraceLine(message string) bool {
+	return stackTraceRegex.MatchString(strings.TrimSpace(message))
 }
 
 func truncate(s string, maxLen int) string {
