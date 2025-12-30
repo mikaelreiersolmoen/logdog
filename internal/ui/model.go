@@ -119,36 +119,36 @@ func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 }
 
 type Model struct {
-	viewport          viewport.Model
-	buffer            *buffer.RingBuffer
-	logManager        *logcat.Manager
-	lineChan          chan string
-	ready             bool
-	width             int
-	height            int
-	appID             string
-	appStatus         string
-	terminating       bool
-	showLogLevel      bool
-	logLevelList      list.Model
-	minLogLevel       logcat.Priority
-	showFilter        bool
-	filterInput       textinput.Model
-	filters           []Filter
-	parsedEntries     []*logcat.Entry
-	needsUpdate       bool
-	highlightedEntry  *logcat.Entry
-	selectionMode     bool
-	selectedEntries   map[*logcat.Entry]bool
-	selectionAnchor   *logcat.Entry
-	autoScroll        bool
-	showDeviceSelect  bool
-	deviceList        list.Model
-	devices           []logcat.Device
-	selectedDevice    string // Device serial or model
-	errorMessage      string
-	showClearConfirm  bool
-	clearInput        textinput.Model
+	viewport         viewport.Model
+	buffer           *buffer.RingBuffer
+	logManager       *logcat.Manager
+	lineChan         chan string
+	ready            bool
+	width            int
+	height           int
+	appID            string
+	appStatus        string
+	terminating      bool
+	showLogLevel     bool
+	logLevelList     list.Model
+	minLogLevel      logcat.Priority
+	showFilter       bool
+	filterInput      textinput.Model
+	filters          []Filter
+	parsedEntries    []*logcat.Entry
+	needsUpdate      bool
+	highlightedEntry *logcat.Entry
+	selectionMode    bool
+	selectedEntries  map[*logcat.Entry]bool
+	selectionAnchor  *logcat.Entry
+	autoScroll       bool
+	showDeviceSelect bool
+	deviceList       list.Model
+	devices          []logcat.Device
+	selectedDevice   string // Device serial or model
+	errorMessage     string
+	showClearConfirm bool
+	clearInput       textinput.Model
 }
 
 type errMsg struct{ err error }
@@ -220,56 +220,56 @@ func NewModel(appID string, tailSize int) Model {
 		logManager := logcat.NewManager(appID, tailSize)
 		logManager.SetDevice(devices[0].Serial)
 		return Model{
-			appID:             appID,
-			buffer:            buffer.NewRingBuffer(10000),
-			logManager:        logManager,
-			lineChan:          make(chan string, 100),
-			showLogLevel:      false,
-			logLevelList:      logLevelList,
-			minLogLevel:       logcat.Verbose,
-			showFilter:        false,
-			filterInput:       filterInput,
-			filters:           []Filter{},
-			parsedEntries:     make([]*logcat.Entry, 0, 10000),
-			needsUpdate:       false,
-			highlightedEntry:  nil,
-			selectionMode:     false,
-			selectedEntries:   make(map[*logcat.Entry]bool),
-			selectionAnchor:   nil,
-			autoScroll:        true,
-			showDeviceSelect:  false,
-			deviceList:        list.Model{},
-			devices:           devices,
-			selectedDevice:    devices[0].Model,
-			showClearConfirm:  false,
-			clearInput:        clearInput,
+			appID:            appID,
+			buffer:           buffer.NewRingBuffer(10000),
+			logManager:       logManager,
+			lineChan:         make(chan string, 100),
+			showLogLevel:     false,
+			logLevelList:     logLevelList,
+			minLogLevel:      logcat.Verbose,
+			showFilter:       false,
+			filterInput:      filterInput,
+			filters:          []Filter{},
+			parsedEntries:    make([]*logcat.Entry, 0, 10000),
+			needsUpdate:      false,
+			highlightedEntry: nil,
+			selectionMode:    false,
+			selectedEntries:  make(map[*logcat.Entry]bool),
+			selectionAnchor:  nil,
+			autoScroll:       true,
+			showDeviceSelect: false,
+			deviceList:       list.Model{},
+			devices:          devices,
+			selectedDevice:   devices[0].Model,
+			showClearConfirm: false,
+			clearInput:       clearInput,
 		}
 	}
 
 	return Model{
-		appID:             appID,
-		buffer:            buffer.NewRingBuffer(10000),
-		logManager:        logcat.NewManager(appID, tailSize),
-		lineChan:          make(chan string, 100),
-		showLogLevel:      false,
-		logLevelList:      logLevelList,
-		minLogLevel:       logcat.Verbose,
-		showFilter:        false,
-		filterInput:       filterInput,
-		filters:           []Filter{},
-		parsedEntries:     make([]*logcat.Entry, 0, 10000),
-		needsUpdate:       false,
-		highlightedEntry:  nil,
-		selectionMode:     false,
-		selectedEntries:   make(map[*logcat.Entry]bool),
-		selectionAnchor:   nil,
-		autoScroll:        true,
-		showDeviceSelect:  showDeviceSelect,
-		deviceList:        deviceList,
-		devices:           devices,
-		selectedDevice:    "",
-		showClearConfirm:  false,
-		clearInput:        clearInput,
+		appID:            appID,
+		buffer:           buffer.NewRingBuffer(10000),
+		logManager:       logcat.NewManager(appID, tailSize),
+		lineChan:         make(chan string, 100),
+		showLogLevel:     false,
+		logLevelList:     logLevelList,
+		minLogLevel:      logcat.Verbose,
+		showFilter:       false,
+		filterInput:      filterInput,
+		filters:          []Filter{},
+		parsedEntries:    make([]*logcat.Entry, 0, 10000),
+		needsUpdate:      false,
+		highlightedEntry: nil,
+		selectionMode:    false,
+		selectedEntries:  make(map[*logcat.Entry]bool),
+		selectionAnchor:  nil,
+		autoScroll:       true,
+		showDeviceSelect: showDeviceSelect,
+		deviceList:       deviceList,
+		devices:          devices,
+		selectedDevice:   "",
+		showClearConfirm: false,
+		clearInput:       clearInput,
 	}
 }
 
@@ -706,20 +706,20 @@ func (m Model) View() string {
 		clearLabel := lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
 			Bold(true).
-			Render("Clear log? ")
+			Render("clear log? ")
 
 		clearHelp := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render("enter y/yes to clear, n/no to cancel | esc: cancel")
+			Render("y/yes: clear | n/no: cancel | esc: cancel")
 
 		clearLine := footerStyleNoBorder.Render(clearLabel + m.clearInput.View())
 		helpLine := footerStyle.Render(clearHelp)
 		footer = lipgloss.JoinVertical(lipgloss.Left, clearLine, helpLine)
 	} else if m.selectionMode {
-		selectionInfo := fmt.Sprintf("SELECTION | %d lines | j/k: extend | c: copy lines | C: copy messages | esc: exit", len(m.selectedEntries))
+		selectionInfo := "SELECTION | j/k: extend | c: copy lines | C: copy messages | esc: cancel"
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear log | j/k: highlight | v: selection mode | l: set log level | f: edit filter"
+		baseHelp := "q: quit | c: clear | v: select | l: log level | f: filter"
 		footer = footerStyle.Render(baseHelp)
 	}
 
