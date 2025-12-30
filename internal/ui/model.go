@@ -292,10 +292,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Calculate header height based on what will be shown
-		headerHeight := 3 // Base header (log level line + border)
-		if m.appID != "" || (len(m.devices) > 1 && m.selectedDevice != "") {
-			headerHeight += 1 // Add line for app/device info
-		}
+		headerHeight := 4 // Base header (log level line + app/device line + border)
 		footerHeight := 2
 		verticalMargin := headerHeight + footerHeight
 
@@ -622,19 +619,19 @@ func (m Model) View() string {
 		logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo)
 	headerLines = append(headerLines, headerStyle.Render(logLevelLine))
 	
-	// Second line: app and device info (if applicable and not showing filter)
-	if !m.showFilter && (m.appID != "" || (len(m.devices) > 1 && m.selectedDevice != "")) {
+	// Second line: app and device info (always show)
+	if !m.showFilter {
 		var infoParts []string
 		if m.appID != "" {
 			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appInfo, statusStyle.Render(statusText)))
+		} else {
+			infoParts = append(infoParts, "app: all")
 		}
-		if len(m.devices) > 1 && m.selectedDevice != "" {
+		if m.selectedDevice != "" {
 			infoParts = append(infoParts, fmt.Sprintf("device: %s", m.selectedDevice))
 		}
-		if len(infoParts) > 0 {
-			infoLine := strings.Join(infoParts, " | ")
-			headerLines = append(headerLines, headerStyleNoBorder.Render(infoLine))
-		}
+		infoLine := strings.Join(infoParts, " | ")
+		headerLines = append(headerLines, headerStyleNoBorder.Render(infoLine))
 	}
 	
 	header := lipgloss.JoinVertical(lipgloss.Left, headerLines...)
