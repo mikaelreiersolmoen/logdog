@@ -156,8 +156,9 @@ type errMsg struct{ err error }
 func (e errMsg) Error() string { return e.err.Error() }
 
 type Filter struct {
-	isTag bool
-	regex *regexp.Regexp
+	isTag   bool
+	pattern string
+	regex   *regexp.Regexp
 }
 
 type logLineMsg string
@@ -593,9 +594,9 @@ func (m Model) View() string {
 		for _, f := range m.filters {
 			var filterText string
 			if f.isTag {
-				filterText = "tag:" + f.regex.String()
+				filterText = "tag:" + f.pattern
 			} else {
-				filterText = f.regex.String()
+				filterText = f.pattern
 			}
 
 			// Use filter colors for filter badges
@@ -863,8 +864,9 @@ func (m *Model) parseFilters(filterStr string) {
 		// Unescape commas
 		part = strings.ReplaceAll(part, "\\,", ",")
 
-		regex, err := regexp.Compile(part)
+		regex, err := regexp.Compile("(?i)" + part)
 		if err == nil {
+			filter.pattern = part
 			filter.regex = regex
 			m.filters = append(m.filters, filter)
 		}
@@ -910,19 +912,38 @@ func (m *Model) matchesFilters(entry *logcat.Entry) bool {
 		return true
 	}
 
+	// Separate tag and message filters
+	var tagFilters, messageFilters []Filter
 	for _, filter := range m.filters {
 		if filter.isTag {
-			if filter.regex.MatchString(entry.Tag) {
-				return true
-			}
+			tagFilters = append(tagFilters, filter)
 		} else {
-			if filter.regex.MatchString(entry.Message) {
-				return true
-			}
+			messageFilters = append(messageFilters, filter)
 		}
 	}
 
-	return false
+	// Tag filters: entry tag must match ANY tag filter (OR logic)
+	if len(tagFilters) > 0 {
+		tagMatched := false
+		for _, filter := range tagFilters {
+			if filter.regex.MatchString(entry.Tag) {
+				tagMatched = true
+				break
+			}
+		}
+		if !tagMatched {
+			return false
+		}
+	}
+
+	// Message filters: entry message must match ALL message filters (AND logic)
+	for _, filter := range messageFilters {
+		if !filter.regex.MatchString(entry.Message) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func startLogcat(manager *logcat.Manager, lineChan chan string) tea.Cmd {
