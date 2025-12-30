@@ -148,6 +148,8 @@ type Model struct {
 	devices           []logcat.Device
 	selectedDevice    string // Device serial or model
 	errorMessage      string
+	showClearConfirm  bool
+	clearInput        textinput.Model
 }
 
 type errMsg struct{ err error }
@@ -184,9 +186,14 @@ func NewModel(appID string, tailSize int) Model {
 		Padding(0, 1)
 
 	filterInput := textinput.New()
-	filterInput.Placeholder = "e.g., error|warning, tag:MyTag"
+	filterInput.Placeholder = "e.g., tag:MyTag, some message"
 	filterInput.CharLimit = 500
 	filterInput.Width = 80
+
+	clearInput := textinput.New()
+	clearInput.Placeholder = "y/n"
+	clearInput.CharLimit = 10
+	clearInput.Width = 40
 
 	// Check for multiple devices
 	devices, err := logcat.GetDevices()
@@ -236,6 +243,8 @@ func NewModel(appID string, tailSize int) Model {
 			deviceList:        list.Model{},
 			devices:           devices,
 			selectedDevice:    devices[0].Model,
+			showClearConfirm:  false,
+			clearInput:        clearInput,
 		}
 	}
 
@@ -262,6 +271,8 @@ func NewModel(appID string, tailSize int) Model {
 		deviceList:        deviceList,
 		devices:           devices,
 		selectedDevice:    "",
+		showClearConfirm:  false,
+		clearInput:        clearInput,
 	}
 }
 
@@ -425,6 +436,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateViewport()
 				return m, nil
 			}
+		} else if m.showClearConfirm {
+			switch msg.String() {
+			case "esc":
+				m.showClearConfirm = false
+				m.clearInput.Blur()
+				m.clearInput.SetValue("")
+				return m, nil
+			case "enter":
+				input := strings.ToLower(strings.TrimSpace(m.clearInput.Value()))
+				if input == "y" || input == "yes" {
+					// Clear the log display
+					m.buffer.Clear()
+					m.parsedEntries = make([]*logcat.Entry, 0, 10000)
+					m.highlightedEntry = nil
+					m.clearSelection()
+					m.updateViewport()
+				}
+				m.showClearConfirm = false
+				m.clearInput.Blur()
+				m.clearInput.SetValue("")
+				return m, nil
+			}
 		} else {
 			switch msg.String() {
 			case "q", "ctrl+c":
@@ -464,6 +497,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectionMode = false
 					m.autoScroll = true
 					m.updateViewportWithScroll(false)
+				} else if !m.selectionMode {
+					// Show clear confirmation dialog
+					m.showClearConfirm = true
+					m.clearInput.Focus()
+					return m, textinput.Blink
 				}
 				return m, nil
 			case "j", "down":
@@ -504,6 +542,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	} else if m.showFilter {
 		m.filterInput, cmd = m.filterInput.Update(msg)
+		cmds = append(cmds, cmd)
+	} else if m.showClearConfirm {
+		m.clearInput, cmd = m.clearInput.Update(msg)
 		cmds = append(cmds, cmd)
 	} else {
 		// Track viewport position before update
@@ -620,7 +661,7 @@ func (m Model) View() string {
 	headerLines = append(headerLines, headerStyle.Render(logLevelLine))
 
 	// Second line: app and device info (always show)
-	if !m.showFilter {
+	if !m.showFilter && !m.showClearConfirm {
 		var infoParts []string
 		if m.appID != "" {
 			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appInfo, statusStyle.Render(statusText)))
@@ -657,11 +698,24 @@ func (m Model) View() string {
 
 		filterHelp := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
-			Render("(comma-separated, tag: prefix for tags | enter: apply | esc: cancel)")
+			Render("comma-separated, tag: prefix for tags | enter: apply | esc: cancel")
 
 		filterLine := footerStyleNoBorder.Render(filterLabel + m.filterInput.View())
 		helpLine := footerStyle.Render(filterHelp)
 		footer = lipgloss.JoinVertical(lipgloss.Left, filterLine, helpLine)
+	} else if m.showClearConfirm {
+		clearLabel := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "117"}).
+			Bold(true).
+			Render("Clear log? ")
+
+		clearHelp := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")).
+			Render("enter y/yes to clear, n/no to cancel | esc: cancel")
+
+		clearLine := footerStyleNoBorder.Render(clearLabel + m.clearInput.View())
+		helpLine := footerStyle.Render(clearHelp)
+		footer = lipgloss.JoinVertical(lipgloss.Left, clearLine, helpLine)
 	} else if m.selectionMode {
 		modeType := "WHOLE-LINE"
 		if m.messageOnlySelect {
@@ -670,7 +724,7 @@ func (m Model) View() string {
 		selectionInfo := fmt.Sprintf("%s SELECTION | %d lines | j/k: extend | v/V: switch mode | c: copy | esc: exit", modeType, len(m.selectedEntries))
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | j/k: highlight | v: select msg | V: select line | l: set log level | f: edit filter"
+		baseHelp := "q: quit | c: clear log | j/k: highlight | v: select msg | V: select line | l: set log level | f: edit filter"
 		footer = footerStyle.Render(baseHelp)
 	}
 
