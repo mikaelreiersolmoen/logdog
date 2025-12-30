@@ -300,7 +300,7 @@ func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool,
 	)
 }
 
-var stackTraceRegex = regexp.MustCompile(`^at\s+[\w.$]+`)
+var stackTraceRegex = regexp.MustCompile(`^(?:at\s+[\w.$]+|\.\.\.\s+\d+\s+more)`)
 
 // IsStackTraceLine checks if a message is a stack trace line (exported for use in UI)
 func IsStackTraceLine(message string) bool {
