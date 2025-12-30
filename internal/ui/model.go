@@ -763,12 +763,12 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 					// Message-only: only highlight the message part
 					line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle, shouldIndent)
 				} else {
-					// Whole-line: highlight everything by passing the background to all parts
-					line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, selectedStyle, shouldIndent)
+					// Whole-line: highlight all columns while keeping colors
+					line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, selectedStyle, shouldIndent)
 				}
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
-				line = m.formatEntryWithBackground(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
+				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
 			} else {
 				line = entry.FormatWithTagAndIndent(lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent)
 			}
@@ -787,8 +787,8 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	}
 }
 
-// formatEntryWithBackground formats an entry with background color applied to all parts
-func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, indent bool) string {
+// formatEntryWithAllColumnsSelected formats an entry with background applied to all columns while preserving colors
+func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, indent bool) string {
 	// Get color for this priority
 	var priorityColor lipgloss.TerminalColor
 	switch entry.Priority {
@@ -818,6 +818,7 @@ func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgS
 		Background(bgStyle.GetBackground())
 
 	messageStyle := lipgloss.NewStyle().
+		Foreground(priorityColor).
 		Background(bgStyle.GetBackground())
 
 	timestampStyle := lipgloss.NewStyle().
