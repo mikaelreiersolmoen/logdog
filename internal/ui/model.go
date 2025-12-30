@@ -1320,8 +1320,8 @@ func (m *Model) copySelectedLines() {
 	var lines []string
 	for _, entry := range visible {
 		if m.selectedEntries[entry] {
-			// Copy the whole line (without styling)
-			lines = append(lines, entry.Format(lipgloss.NewStyle()))
+			// Copy the whole line without any styling or ANSI codes
+			lines = append(lines, entry.FormatPlain())
 		}
 	}
 

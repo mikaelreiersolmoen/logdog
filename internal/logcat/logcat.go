@@ -300,6 +300,16 @@ func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool,
 	)
 }
 
+// FormatPlain returns a plain text representation without any styling or ANSI codes
+func (e *Entry) FormatPlain() string {
+	return fmt.Sprintf("%s %s %-20s %s",
+		e.Timestamp,
+		e.Priority.String(),
+		truncate(e.Tag, 20),
+		e.Message,
+	)
+}
+
 var stackTraceRegex = regexp.MustCompile(`^(?:at\s+[\w.$]+|\.\.\.\s+\d+\s+more)`)
 
 // IsStackTraceLine checks if a message is a stack trace line (exported for use in UI)
