@@ -528,7 +528,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect {
+		// Only handle mouse release (not drag) to avoid performance issues
+		if msg.Type == tea.MouseRelease && msg.Button == tea.MouseButtonLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect {
 			m.autoScroll = false
 			m.handleMouseClick(msg.Y)
 			m.updateViewportWithScroll(false)
@@ -1183,6 +1184,7 @@ func (m *Model) moveHighlightDown() {
 	if m.highlightedEntry == nil {
 		// Start at the first visible entry
 		m.highlightedEntry = visible[0]
+		m.ensureLineVisible(0)
 		return
 	}
 
@@ -1190,6 +1192,7 @@ func (m *Model) moveHighlightDown() {
 	for i, entry := range visible {
 		if entry == m.highlightedEntry && i < len(visible)-1 {
 			m.highlightedEntry = visible[i+1]
+			m.ensureLineVisible(i + 1)
 			return
 		}
 	}
@@ -1205,6 +1208,7 @@ func (m *Model) moveHighlightUp() {
 	if m.highlightedEntry == nil {
 		// Start at the last visible entry
 		m.highlightedEntry = visible[len(visible)-1]
+		m.ensureLineVisible(len(visible) - 1)
 		return
 	}
 
@@ -1212,6 +1216,7 @@ func (m *Model) moveHighlightUp() {
 	for i, entry := range visible {
 		if entry == m.highlightedEntry && i > 0 {
 			m.highlightedEntry = visible[i-1]
+			m.ensureLineVisible(i - 1)
 			return
 		}
 	}
