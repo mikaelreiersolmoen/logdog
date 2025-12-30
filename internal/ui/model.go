@@ -495,7 +495,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.copySelectedMessages()
 					m.clearSelection()
 					m.selectionMode = false
-					m.autoScroll = true
 					m.updateViewportWithScroll(false)
 				} else if !m.selectionMode {
 					// Show clear confirmation dialog
