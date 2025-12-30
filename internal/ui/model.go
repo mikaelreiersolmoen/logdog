@@ -1070,6 +1070,58 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 	}
 }
 
+// ensureEntryVisible scrolls the viewport to ensure the given entry is visible,
+// positioning it roughly in the center to allow movement in both directions
+func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
+	if entry == nil {
+		return
+	}
+
+	visible := m.getVisibleEntries()
+	if len(visible) == 0 {
+		return
+	}
+
+	// Find the line number of the entry in the visible entries list
+	lineNumber := -1
+	for i, e := range visible {
+		if e == entry {
+			lineNumber = i
+			break
+		}
+	}
+
+	if lineNumber == -1 {
+		return // Entry not found in visible entries
+	}
+
+	// Check if the line is currently visible in the viewport
+	viewportTop := m.viewport.YOffset
+	viewportBottom := m.viewport.YOffset + m.viewport.Height - 1
+
+	// If the line is not visible, center it in the viewport
+	if lineNumber < viewportTop || lineNumber > viewportBottom {
+		// Calculate offset to center the line in the viewport
+		centerOffset := lineNumber - m.viewport.Height/2
+		
+		// Ensure we don't scroll before the start
+		if centerOffset < 0 {
+			centerOffset = 0
+		}
+		
+		// Ensure we don't scroll past the end
+		maxOffset := len(visible) - m.viewport.Height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if centerOffset > maxOffset {
+			centerOffset = maxOffset
+		}
+		
+		m.viewport.SetYOffset(centerOffset)
+	}
+}
+
 // enterSelectionMode enters selection mode
 func (m *Model) enterSelectionMode() {
 	// If already in selection mode, do nothing
@@ -1084,6 +1136,8 @@ func (m *Model) enterSelectionMode() {
 		m.selectedEntries = make(map[*logcat.Entry]bool)
 		m.selectedEntries[m.highlightedEntry] = true
 		m.selectionAnchor = m.highlightedEntry
+		// Ensure the highlighted entry is visible
+		m.ensureEntryVisible(m.highlightedEntry)
 	} else {
 		// Otherwise, select the last visible entry
 		visible := m.getVisibleEntries()
@@ -1093,6 +1147,8 @@ func (m *Model) enterSelectionMode() {
 			m.selectedEntries[lastEntry] = true
 			m.selectionAnchor = lastEntry
 			m.highlightedEntry = lastEntry
+			// Ensure the selected entry is visible
+			m.ensureEntryVisible(lastEntry)
 		}
 	}
 }
