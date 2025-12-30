@@ -1000,15 +1000,11 @@ func (m *Model) getVisibleEntries() []*logcat.Entry {
 // handleMouseClick handles clicking on a row
 func (m *Model) handleMouseClick(y int) {
 	// Calculate which entry was clicked
-	viewportStartY := 2
-
-	// If click is before viewport content, ignore
-	if y <= viewportStartY {
-		return
-	}
+	// Mouse Y is 1-indexed, and viewport is rendered first (before header)
+	// So viewport starts at Y=1
 
 	// Calculate line within viewport (0-indexed)
-	lineInViewport := y - viewportStartY - 1
+	lineInViewport := y
 
 	// If click is beyond viewport height, ignore (in footer area)
 	if lineInViewport < 0 || lineInViewport >= m.viewport.Height {
@@ -1127,12 +1123,12 @@ func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
 	if lineNumber < viewportTop || lineNumber > viewportBottom {
 		// Calculate offset to center the line in the viewport
 		centerOffset := lineNumber - m.viewport.Height/2
-		
+
 		// Ensure we don't scroll before the start
 		if centerOffset < 0 {
 			centerOffset = 0
 		}
-		
+
 		// Ensure we don't scroll past the end
 		maxOffset := len(visible) - m.viewport.Height
 		if maxOffset < 0 {
@@ -1141,7 +1137,7 @@ func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
 		if centerOffset > maxOffset {
 			centerOffset = maxOffset
 		}
-		
+
 		m.viewport.SetYOffset(centerOffset)
 	}
 }
