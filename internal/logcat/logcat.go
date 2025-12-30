@@ -13,13 +13,13 @@ import (
 
 // Color palette for log levels
 var (
-	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "247"}  // Very subtle gray
-	colorDebug   = lipgloss.AdaptiveColor{Light: "30", Dark: "116"}   // Moderate teal
-	colorInfo    = lipgloss.AdaptiveColor{Light: "28", Dark: "114"}   // Vibrant green
-	colorWarn    = lipgloss.AdaptiveColor{Light: "130", Dark: "178"}  // Subtle orange
-	colorError   = lipgloss.AdaptiveColor{Light: "124", Dark: "210"}  // Subtle red
-	colorFatal   = lipgloss.AdaptiveColor{Light: "126", Dark: "182"}  // Subtle magenta
-	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}    // Black/White
+	colorVerbose = lipgloss.AdaptiveColor{Light: "240", Dark: "247"} // Very subtle gray
+	colorDebug   = lipgloss.AdaptiveColor{Light: "30", Dark: "116"}  // Moderate teal
+	colorInfo    = lipgloss.AdaptiveColor{Light: "28", Dark: "114"}  // Vibrant green
+	colorWarn    = lipgloss.AdaptiveColor{Light: "130", Dark: "178"} // Subtle orange
+	colorError   = lipgloss.AdaptiveColor{Light: "124", Dark: "210"} // Subtle red
+	colorFatal   = lipgloss.AdaptiveColor{Light: "126", Dark: "182"} // Subtle magenta
+	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}   // Black/White
 )
 
 // Getter functions for colors
@@ -32,30 +32,30 @@ func GetFatalColor() lipgloss.TerminalColor   { return colorFatal }
 
 // Color palette for tags - pastel colors that don't overlap with log levels
 var tagColors = []lipgloss.AdaptiveColor{
-	{Light: "30", Dark: "123"},   // Pastel teal
-	{Light: "91", Dark: "183"},   // Pastel purple
-	{Light: "130", Dark: "222"},  // Pastel peach
-	{Light: "64", Dark: "151"},   // Pastel lime
-	{Light: "97", Dark: "189"},   // Pastel lavender
-	{Light: "37", Dark: "122"},   // Pastel cyan
-	{Light: "90", Dark: "182"},   // Pastel violet
-	{Light: "131", Dark: "217"},  // Pastel tan
-	{Light: "65", Dark: "152"},   // Pastel mint
-	{Light: "98", Dark: "190"},   // Pastel mauve
+	{Light: "30", Dark: "123"},  // Pastel teal
+	{Light: "91", Dark: "183"},  // Pastel purple
+	{Light: "130", Dark: "222"}, // Pastel peach
+	{Light: "64", Dark: "151"},  // Pastel lime
+	{Light: "97", Dark: "189"},  // Pastel lavender
+	{Light: "37", Dark: "122"},  // Pastel cyan
+	{Light: "90", Dark: "182"},  // Pastel violet
+	{Light: "131", Dark: "217"}, // Pastel tan
+	{Light: "65", Dark: "152"},  // Pastel mint
+	{Light: "98", Dark: "190"},  // Pastel mauve
 }
 
 // Color palette for filter badges - very subtle muted colors
 var filterColors = []lipgloss.AdaptiveColor{
-	{Light: "109", Dark: "102"},  // Muted teal-gray
-	{Light: "146", Dark: "139"},  // Muted purple-gray
-	{Light: "181", Dark: "174"},  // Muted peach-gray
-	{Light: "144", Dark: "108"},  // Muted lime-gray
-	{Light: "182", Dark: "145"},  // Muted lavender-gray
-	{Light: "116", Dark: "109"},  // Muted cyan-gray
-	{Light: "140", Dark: "139"},  // Muted violet-gray
-	{Light: "180", Dark: "144"},  // Muted tan-gray
-	{Light: "151", Dark: "108"},  // Muted mint-gray
-	{Light: "183", Dark: "146"},  // Muted mauve-gray
+	{Light: "109", Dark: "102"}, // Muted teal-gray
+	{Light: "146", Dark: "139"}, // Muted purple-gray
+	{Light: "181", Dark: "174"}, // Muted peach-gray
+	{Light: "144", Dark: "108"}, // Muted lime-gray
+	{Light: "182", Dark: "145"}, // Muted lavender-gray
+	{Light: "116", Dark: "109"}, // Muted cyan-gray
+	{Light: "140", Dark: "139"}, // Muted violet-gray
+	{Light: "180", Dark: "144"}, // Muted tan-gray
+	{Light: "151", Dark: "108"}, // Muted mint-gray
+	{Light: "183", Dark: "146"}, // Muted mauve-gray
 }
 
 // Priority represents logcat priority levels
@@ -147,13 +147,13 @@ func TagColor(tag string) lipgloss.TerminalColor {
 	if tag == "" {
 		return colorDefault
 	}
-	
+
 	// Simple hash function to map tag to color index
 	var hash uint32
 	for i := 0; i < len(tag); i++ {
 		hash = hash*31 + uint32(tag[i])
 	}
-	
+
 	colorIndex := int(hash) % len(tagColors)
 	return tagColors[colorIndex]
 }
@@ -163,13 +163,13 @@ func FilterColor(filterText string) lipgloss.TerminalColor {
 	if filterText == "" {
 		return colorDefault
 	}
-	
+
 	// Simple hash function to map filter to color index
 	var hash uint32
 	for i := 0; i < len(filterText); i++ {
 		hash = hash*31 + uint32(filterText[i])
 	}
-	
+
 	colorIndex := int(hash) % len(filterColors)
 	return filterColors[colorIndex]
 }
@@ -275,7 +275,7 @@ func (e *Entry) FormatWithTagAndMessageStyle(style lipgloss.Style, showTag bool,
 	// Tag uses hash-based color
 	tagStyle := lipgloss.NewStyle().
 		Foreground(TagColor(e.Tag))
-	
+
 	// Message uses subtle color
 	messageStyle = messageStyle.Foreground(subtleColor)
 
@@ -456,12 +456,12 @@ func (m *Manager) getPID() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("adb command failed - is Android SDK installed?")
 	}
-	
+
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if len(lines) <= 1 {
 		return "", fmt.Errorf("no devices/emulators found - connect a device or start an emulator")
 	}
-	
+
 	// Get PID
 	args := []string{}
 	if m.deviceSerial != "" {
@@ -473,12 +473,12 @@ func (m *Manager) getPID() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", m.appID)
 	}
-	
+
 	pid := strings.TrimSpace(string(output))
 	if pid == "" {
 		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", m.appID)
 	}
-	
+
 	return pid, nil
 }
 

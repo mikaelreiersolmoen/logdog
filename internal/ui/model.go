@@ -33,7 +33,7 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	}
 
 	priority := logcat.Priority(i)
-	
+
 	// Map priority to keyboard shortcut
 	var shortcut string
 	switch priority {
@@ -50,7 +50,7 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	case logcat.Fatal:
 		shortcut = "f"
 	}
-	
+
 	str := fmt.Sprintf("(%s) %s", shortcut, priority.Name())
 
 	// Get subtle message color for this priority
@@ -119,21 +119,21 @@ func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 }
 
 type Model struct {
-	viewport         viewport.Model
-	buffer           *buffer.RingBuffer
-	logManager       *logcat.Manager
-	lineChan         chan string
-	ready            bool
-	width            int
-	height           int
-	appID            string
-	appStatus        string
-	terminating      bool
-	showLogLevel     bool
-	logLevelList     list.Model
-	minLogLevel      logcat.Priority
-	showFilter       bool
-	filterInput      textinput.Model
+	viewport          viewport.Model
+	buffer            *buffer.RingBuffer
+	logManager        *logcat.Manager
+	lineChan          chan string
+	ready             bool
+	width             int
+	height            int
+	appID             string
+	appStatus         string
+	terminating       bool
+	showLogLevel      bool
+	logLevelList      list.Model
+	minLogLevel       logcat.Priority
+	showFilter        bool
+	filterInput       textinput.Model
 	filters           []Filter
 	parsedEntries     []*logcat.Entry
 	needsUpdate       bool
@@ -192,7 +192,7 @@ func NewModel(appID string, tailSize int) Model {
 	devices, err := logcat.GetDevices()
 	showDeviceSelect := false
 	var deviceList list.Model
-	
+
 	if err == nil && len(devices) > 1 {
 		// Multiple devices - show device selector
 		showDeviceSelect = true
@@ -214,14 +214,14 @@ func NewModel(appID string, tailSize int) Model {
 		logManager := logcat.NewManager(appID, tailSize)
 		logManager.SetDevice(devices[0].Serial)
 		return Model{
-			appID:            appID,
-			buffer:           buffer.NewRingBuffer(10000),
-			logManager:       logManager,
-			lineChan:         make(chan string, 100),
-			showLogLevel:     false,
-			logLevelList:     logLevelList,
-			minLogLevel:      logcat.Verbose,
-			showFilter:       false,
+			appID:             appID,
+			buffer:            buffer.NewRingBuffer(10000),
+			logManager:        logManager,
+			lineChan:          make(chan string, 100),
+			showLogLevel:      false,
+			logLevelList:      logLevelList,
+			minLogLevel:       logcat.Verbose,
+			showFilter:        false,
 			filterInput:       filterInput,
 			filters:           []Filter{},
 			parsedEntries:     make([]*logcat.Entry, 0, 10000),
@@ -240,14 +240,14 @@ func NewModel(appID string, tailSize int) Model {
 	}
 
 	return Model{
-		appID:            appID,
-		buffer:           buffer.NewRingBuffer(10000),
-		logManager:       logcat.NewManager(appID, tailSize),
-		lineChan:         make(chan string, 100),
-		showLogLevel:     false,
-		logLevelList:     logLevelList,
-		minLogLevel:      logcat.Verbose,
-		showFilter:       false,
+		appID:             appID,
+		buffer:            buffer.NewRingBuffer(10000),
+		logManager:        logcat.NewManager(appID, tailSize),
+		lineChan:          make(chan string, 100),
+		showLogLevel:      false,
+		logLevelList:      logLevelList,
+		minLogLevel:       logcat.Verbose,
+		showFilter:        false,
 		filterInput:       filterInput,
 		filters:           []Filter{},
 		parsedEntries:     make([]*logcat.Entry, 0, 10000),
@@ -270,7 +270,7 @@ func (m Model) Init() tea.Cmd {
 	if m.showDeviceSelect {
 		return nil
 	}
-	
+
 	cmds := []tea.Cmd{
 		startLogcat(m.logManager, m.lineChan),
 		waitForLogLine(m.lineChan),
@@ -486,7 +486,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		
+
 	case tea.MouseMsg:
 		if msg.Type == tea.MouseLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect {
 			m.autoScroll = false
@@ -510,7 +510,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		wasAtBottom := m.viewport.AtBottom()
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
-		
+
 		// Re-enable auto-scroll if user scrolled to bottom
 		if !wasAtBottom && m.viewport.AtBottom() {
 			m.autoScroll = true
@@ -557,7 +557,7 @@ func (m Model) View() string {
 			} else {
 				filterText = f.regex.String()
 			}
-			
+
 			// Use filter colors for filter badges
 			filterColor := logcat.FilterColor(filterText)
 			filterBadge := lipgloss.NewStyle().
@@ -577,7 +577,7 @@ func (m Model) View() string {
 
 	statusStyle := lipgloss.NewStyle()
 	var statusText string
-	
+
 	switch m.appStatus {
 	case "running":
 		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "71", Dark: "114"}) // Green
@@ -613,12 +613,12 @@ func (m Model) View() string {
 
 	// Build header lines
 	var headerLines []string
-	
+
 	// First line: log level and filters
 	logLevelLine := fmt.Sprintf("log level: %s%s",
 		logLevelStyle.Render(strings.ToLower(m.minLogLevel.Name())), filterInfo)
 	headerLines = append(headerLines, headerStyle.Render(logLevelLine))
-	
+
 	// Second line: app and device info (always show)
 	if !m.showFilter {
 		var infoParts []string
@@ -633,7 +633,7 @@ func (m Model) View() string {
 		infoLine := strings.Join(infoParts, " | ")
 		headerLines = append(headerLines, headerStyleNoBorder.Render(infoLine))
 	}
-	
+
 	header := lipgloss.JoinVertical(lipgloss.Left, headerLines...)
 
 	footerStyle := lipgloss.NewStyle().
@@ -690,7 +690,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
 	var lastTimestamp string
-	
+
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
 	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"}) // Subtle highlight
 
@@ -699,7 +699,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 			var line string
 
 			// Check if this should be indented (stack trace continuation with same timestamp)
-			shouldIndent := entry.Timestamp == lastTimestamp && 
+			shouldIndent := entry.Timestamp == lastTimestamp &&
 				logcat.IsStackTraceLine(entry.Message)
 
 			// Apply styles based on selection/highlight state
@@ -762,10 +762,10 @@ func (m *Model) formatEntryWithBackground(entry *logcat.Entry, showTag bool, bgS
 	tagStyle := lipgloss.NewStyle().
 		Foreground(logcat.TagColor(entry.Tag)).
 		Background(bgStyle.GetBackground())
-	
+
 	messageStyle := lipgloss.NewStyle().
 		Background(bgStyle.GetBackground())
-	
+
 	timestampStyle := lipgloss.NewStyle().
 		Background(bgStyle.GetBackground())
 
@@ -969,10 +969,10 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 	if m.selectionAnchor == nil {
 		return
 	}
-	
+
 	anchorIdx := -1
 	targetIdx := -1
-	
+
 	for i, entry := range visible {
 		if entry == m.selectionAnchor {
 			anchorIdx = i
@@ -981,20 +981,20 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 			targetIdx = i
 		}
 	}
-	
+
 	if anchorIdx < 0 || targetIdx < 0 {
 		return
 	}
-	
+
 	// Clear and rebuild selection
 	m.selectedEntries = make(map[*logcat.Entry]bool)
-	
+
 	start := anchorIdx
 	end := targetIdx
 	if start > end {
 		start, end = end, start
 	}
-	
+
 	for i := start; i <= end; i++ {
 		m.selectedEntries[visible[i]] = true
 	}
@@ -1007,7 +1007,7 @@ func (m *Model) enterSelectionMode(messageOnly bool) {
 		m.messageOnlySelect = messageOnly
 		return
 	}
-	
+
 	m.selectionMode = true
 	m.messageOnlySelect = messageOnly
 
@@ -1083,7 +1083,7 @@ func (m *Model) extendSelectionDown() {
 	anchorIdx := -1
 	highestIdx := -1
 	lowestIdx := -1
-	
+
 	for i, entry := range visible {
 		if entry == m.selectionAnchor {
 			anchorIdx = i
@@ -1121,7 +1121,7 @@ func (m *Model) extendSelectionUp() {
 	anchorIdx := -1
 	highestIdx := -1
 	lowestIdx := -1
-	
+
 	for i, entry := range visible {
 		if entry == m.selectionAnchor {
 			anchorIdx = i
@@ -1160,7 +1160,7 @@ func (m *Model) copySelectedMessages() {
 	if len(m.selectedEntries) == 0 {
 		return
 	}
-	
+
 	// Get selected entries in order
 	visible := m.getVisibleEntries()
 	var lines []string
@@ -1175,7 +1175,7 @@ func (m *Model) copySelectedMessages() {
 			}
 		}
 	}
-	
+
 	// Copy to clipboard using pbcopy (macOS) or similar
 	clipboard := strings.Join(lines, "\n")
 	cmd := exec.Command("pbcopy")
