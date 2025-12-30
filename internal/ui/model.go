@@ -139,7 +139,6 @@ type Model struct {
 	needsUpdate       bool
 	highlightedEntry  *logcat.Entry
 	selectionMode     bool
-	messageOnlySelect bool // true for message-only (v), false for whole-line (V)
 	selectedEntries   map[*logcat.Entry]bool
 	selectionAnchor   *logcat.Entry
 	autoScroll        bool
@@ -235,7 +234,6 @@ func NewModel(appID string, tailSize int) Model {
 			needsUpdate:       false,
 			highlightedEntry:  nil,
 			selectionMode:     false,
-			messageOnlySelect: false,
 			selectedEntries:   make(map[*logcat.Entry]bool),
 			selectionAnchor:   nil,
 			autoScroll:        true,
@@ -263,7 +261,6 @@ func NewModel(appID string, tailSize int) Model {
 		needsUpdate:       false,
 		highlightedEntry:  nil,
 		selectionMode:     false,
-		messageOnlySelect: false,
 		selectedEntries:   make(map[*logcat.Entry]bool),
 		selectionAnchor:   nil,
 		autoScroll:        true,
@@ -480,19 +477,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.autoScroll = true
 				m.updateViewportWithScroll(false)
 				return m, nil
-			case "v": // v to enter message-only selection mode
+			case "v": // v to enter selection mode
 				m.autoScroll = false
-				m.enterSelectionMode(true)
-				m.updateViewportWithScroll(false)
-				return m, nil
-			case "V": // Shift+v to enter whole-line selection mode
-				m.autoScroll = false
-				m.enterSelectionMode(false)
+				m.enterSelectionMode()
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "c":
 				if m.selectionMode && len(m.selectedEntries) > 0 {
-					m.copySelectedMessages()
+					m.copySelectedLines()
 					m.clearSelection()
 					m.selectionMode = false
 					m.updateViewportWithScroll(false)
@@ -501,6 +493,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.showClearConfirm = true
 					m.clearInput.Focus()
 					return m, textinput.Blink
+				}
+				return m, nil
+			case "C": // C to copy message only in selection mode
+				if m.selectionMode && len(m.selectedEntries) > 0 {
+					m.copySelectedMessagesOnly()
+					m.clearSelection()
+					m.selectionMode = false
+					m.updateViewportWithScroll(false)
 				}
 				return m, nil
 			case "j", "down":
@@ -716,14 +716,10 @@ func (m Model) View() string {
 		helpLine := footerStyle.Render(clearHelp)
 		footer = lipgloss.JoinVertical(lipgloss.Left, clearLine, helpLine)
 	} else if m.selectionMode {
-		modeType := "WHOLE-LINE"
-		if m.messageOnlySelect {
-			modeType = "MESSAGE"
-		}
-		selectionInfo := fmt.Sprintf("%s SELECTION | %d lines | j/k: extend | v/V: switch mode | c: copy | esc: exit", modeType, len(m.selectedEntries))
+		selectionInfo := fmt.Sprintf("SELECTION | %d lines | j/k: extend | c: copy lines | C: copy messages | esc: exit", len(m.selectedEntries))
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear log | j/k: highlight | v: select msg | V: select line | l: set log level | f: edit filter"
+		baseHelp := "q: quit | c: clear log | j/k: highlight | v: selection mode | l: set log level | f: edit filter"
 		footer = footerStyle.Render(baseHelp)
 	}
 
@@ -757,14 +753,8 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 
 			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
-				// Strong selection style
-				if m.messageOnlySelect {
-					// Message-only: only highlight the message part
-					line = entry.FormatWithTagAndMessageStyle(lipgloss.NewStyle(), entry.Tag != lastTag, selectedStyle, shouldIndent)
-				} else {
-					// Whole-line: highlight all columns while keeping colors
-					line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, selectedStyle, shouldIndent)
-				}
+				// Strong selection style - whole-line: highlight all columns while keeping colors
+				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, selectedStyle, shouldIndent)
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
 				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
@@ -1055,15 +1045,13 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 }
 
 // enterSelectionMode enters selection mode
-func (m *Model) enterSelectionMode(messageOnly bool) {
-	// If already in selection mode, just switch the mode type
+func (m *Model) enterSelectionMode() {
+	// If already in selection mode, do nothing
 	if m.selectionMode {
-		m.messageOnlySelect = messageOnly
 		return
 	}
 
 	m.selectionMode = true
-	m.messageOnlySelect = messageOnly
 
 	// If there's a highlighted entry, use it as the anchor
 	if m.highlightedEntry != nil {
@@ -1209,8 +1197,8 @@ func (m *Model) clearSelection() {
 	m.selectionAnchor = nil
 }
 
-// copySelectedMessages copies selected messages to clipboard
-func (m *Model) copySelectedMessages() {
+// copySelectedLines copies selected lines (whole entries) to clipboard
+func (m *Model) copySelectedLines() {
 	if len(m.selectedEntries) == 0 {
 		return
 	}
@@ -1220,13 +1208,31 @@ func (m *Model) copySelectedMessages() {
 	var lines []string
 	for _, entry := range visible {
 		if m.selectedEntries[entry] {
-			if m.messageOnlySelect {
-				// Copy only the message
-				lines = append(lines, entry.Message)
-			} else {
-				// Copy the whole line (without styling)
-				lines = append(lines, entry.Format(lipgloss.NewStyle()))
-			}
+			// Copy the whole line (without styling)
+			lines = append(lines, entry.Format(lipgloss.NewStyle()))
+		}
+	}
+
+	// Copy to clipboard using pbcopy (macOS) or similar
+	clipboard := strings.Join(lines, "\n")
+	cmd := exec.Command("pbcopy")
+	cmd.Stdin = strings.NewReader(clipboard)
+	cmd.Run()
+}
+
+// copySelectedMessagesOnly copies only the message column of selected entries to clipboard
+func (m *Model) copySelectedMessagesOnly() {
+	if len(m.selectedEntries) == 0 {
+		return
+	}
+
+	// Get selected entries in order
+	visible := m.getVisibleEntries()
+	var lines []string
+	for _, entry := range visible {
+		if m.selectedEntries[entry] {
+			// Copy only the message
+			lines = append(lines, entry.Message)
 		}
 	}
 
