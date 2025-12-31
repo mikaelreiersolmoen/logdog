@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mikaelreiersolmoen/logdog/internal/adb"
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 	"github.com/mikaelreiersolmoen/logdog/internal/ui"
 )
@@ -22,12 +23,12 @@ func main() {
 	// Validate connectivity before starting UI (only if app filtering is requested and single device)
 	if appID != "" {
 		// Check device count first
-		devices, err := logcat.GetDevices()
+		devices, err := adb.GetDevices()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		// Only validate if single device (multi-device validation happens after selection)
 		if len(devices) == 1 {
 			logManager := logcat.NewManager(appID, tailSize)

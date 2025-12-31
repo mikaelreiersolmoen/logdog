@@ -13,12 +13,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mikaelreiersolmoen/logdog/internal/adb"
 	"github.com/mikaelreiersolmoen/logdog/internal/buffer"
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 )
-
-// UI accent color used in headers and selected items
-var accentColor = lipgloss.AdaptiveColor{Light: "33", Dark: "110"}
 
 type logLevelItem logcat.Priority
 
@@ -60,19 +58,19 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	var subtleColor lipgloss.TerminalColor
 	switch priority {
 	case logcat.Verbose:
-		subtleColor = logcat.GetVerboseColor()
+		subtleColor = GetVerboseColor()
 	case logcat.Debug:
-		subtleColor = logcat.GetDebugColor()
+		subtleColor = GetDebugColor()
 	case logcat.Info:
-		subtleColor = logcat.GetInfoColor()
+		subtleColor = GetInfoColor()
 	case logcat.Warn:
-		subtleColor = logcat.GetWarnColor()
+		subtleColor = GetWarnColor()
 	case logcat.Error:
-		subtleColor = logcat.GetErrorColor()
+		subtleColor = GetErrorColor()
 	case logcat.Fatal:
-		subtleColor = logcat.GetFatalColor()
+		subtleColor = GetFatalColor()
 	default:
-		subtleColor = logcat.GetVerboseColor()
+		subtleColor = GetVerboseColor()
 	}
 
 	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
@@ -88,7 +86,7 @@ func (d logLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	fmt.Fprint(w, fn(str))
 }
 
-type deviceItem logcat.Device
+type deviceItem adb.Device
 
 func (i deviceItem) FilterValue() string { return "" }
 
@@ -103,13 +101,13 @@ func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 		return
 	}
 
-	device := logcat.Device(i)
+	device := adb.Device(i)
 	str := fmt.Sprintf("%s - %s", device.Serial, device.Model)
 
 	itemStyle := lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle := lipgloss.NewStyle().
 		PaddingLeft(2).
-		Foreground(accentColor)
+		Foreground(GetAccentColor())
 
 	fn := itemStyle.Render
 	if index == m.Index() {
@@ -147,7 +145,7 @@ type Model struct {
 	autoScroll       bool
 	showDeviceSelect bool
 	deviceList       list.Model
-	devices          []logcat.Device
+	devices          []adb.Device
 	selectedDevice   string // Device serial or model
 	errorMessage     string
 	showClearConfirm bool
@@ -199,7 +197,7 @@ func NewModel(appID string, tailSize int) Model {
 	clearInput.Width = 40
 
 	// Check for multiple devices
-	devices, err := logcat.GetDevices()
+	devices, err := adb.GetDevices()
 	showDeviceSelect := false
 	var deviceList list.Model
 
@@ -217,7 +215,7 @@ func NewModel(appID string, tailSize int) Model {
 		deviceList.SetShowPagination(false)
 		deviceList.Styles.Title = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(accentColor).
+			Foreground(GetAccentColor()).
 			Padding(0, 1)
 	} else if err == nil && len(devices) == 1 {
 		// Single device - use it automatically
@@ -364,7 +362,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "enter":
 				if i, ok := m.deviceList.SelectedItem().(deviceItem); ok {
-					device := logcat.Device(i)
+					device := adb.Device(i)
 					m.logManager.SetDevice(device.Serial)
 					m.selectedDevice = device.Model
 					m.showDeviceSelect = false
@@ -603,7 +601,7 @@ func (m Model) View() string {
 			}
 
 			// Use filter colors for filter badges
-			filterColor := logcat.FilterColor(filterText)
+			filterColor := FilterColor(filterText)
 			filterBadge := lipgloss.NewStyle().
 				Background(filterColor).
 				Foreground(lipgloss.AdaptiveColor{Light: "0", Dark: "0"}).
@@ -638,19 +636,19 @@ func (m Model) View() string {
 	var logLevelColor lipgloss.TerminalColor
 	switch m.minLogLevel {
 	case logcat.Verbose:
-		logLevelColor = logcat.GetVerboseColor()
+		logLevelColor = GetVerboseColor()
 	case logcat.Debug:
-		logLevelColor = logcat.GetDebugColor()
+		logLevelColor = GetDebugColor()
 	case logcat.Info:
-		logLevelColor = logcat.GetInfoColor()
+		logLevelColor = GetInfoColor()
 	case logcat.Warn:
-		logLevelColor = logcat.GetWarnColor()
+		logLevelColor = GetWarnColor()
 	case logcat.Error:
-		logLevelColor = logcat.GetErrorColor()
+		logLevelColor = GetErrorColor()
 	case logcat.Fatal:
-		logLevelColor = logcat.GetFatalColor()
+		logLevelColor = GetFatalColor()
 	default:
-		logLevelColor = logcat.GetVerboseColor()
+		logLevelColor = GetVerboseColor()
 	}
 
 	logLevelStyle := lipgloss.NewStyle().Foreground(logLevelColor)
@@ -666,8 +664,8 @@ func (m Model) View() string {
 	// Second line: app and device info (always show)
 	if !m.showFilter && !m.showClearConfirm {
 		var infoParts []string
-		appStyle := lipgloss.NewStyle().Foreground(accentColor)
-		deviceStyle := lipgloss.NewStyle().Foreground(accentColor)
+		appStyle := lipgloss.NewStyle().Foreground(GetAccentColor())
+		deviceStyle := lipgloss.NewStyle().Foreground(GetAccentColor())
 		if m.appID != "" {
 			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appStyle.Render(appInfo), statusStyle.Render(statusText)))
 		} else {
@@ -697,7 +695,7 @@ func (m Model) View() string {
 	var footer string
 	if m.showFilter {
 		filterLabel := lipgloss.NewStyle().
-			Foreground(accentColor).
+			Foreground(GetAccentColor()).
 			Bold(true).
 			Render("filter: ")
 
@@ -710,7 +708,7 @@ func (m Model) View() string {
 		footer = lipgloss.JoinVertical(lipgloss.Left, filterLine, helpLine)
 	} else if m.showClearConfirm {
 		clearLabel := lipgloss.NewStyle().
-			Foreground(accentColor).
+			Foreground(GetAccentColor()).
 			Bold(true).
 			Render("clear log? ")
 
@@ -765,7 +763,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 				// Subtle highlight style - whole line background
 				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
 			} else {
-				line = entry.FormatWithTagAndIndent(lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent)
+				line = FormatEntryWithTagAndIndent(entry, lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent)
 			}
 
 			lines = append(lines, line)
@@ -788,19 +786,19 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 	var priorityColor lipgloss.TerminalColor
 	switch entry.Priority {
 	case logcat.Verbose:
-		priorityColor = logcat.GetVerboseColor()
+		priorityColor = GetVerboseColor()
 	case logcat.Debug:
-		priorityColor = logcat.GetDebugColor()
+		priorityColor = GetDebugColor()
 	case logcat.Info:
-		priorityColor = logcat.GetInfoColor()
+		priorityColor = GetInfoColor()
 	case logcat.Warn:
-		priorityColor = logcat.GetWarnColor()
+		priorityColor = GetWarnColor()
 	case logcat.Error:
-		priorityColor = logcat.GetErrorColor()
+		priorityColor = GetErrorColor()
 	case logcat.Fatal:
-		priorityColor = logcat.GetFatalColor()
+		priorityColor = GetFatalColor()
 	default:
-		priorityColor = logcat.GetVerboseColor()
+		priorityColor = GetVerboseColor()
 	}
 
 	priorityStyle := lipgloss.NewStyle().
@@ -809,7 +807,7 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 		Bold(true)
 
 	tagStyle := lipgloss.NewStyle().
-		Foreground(logcat.TagColor(entry.Tag)).
+		Foreground(TagColor(entry.Tag)).
 		Background(bgStyle.GetBackground())
 
 	messageStyle := lipgloss.NewStyle().
