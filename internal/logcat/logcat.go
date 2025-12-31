@@ -137,10 +137,11 @@ func ParseLine(line string) (*Entry, error) {
 		remainder := line[tagMsgIdx+len(parts[4]):]
 		remainder = strings.TrimSpace(remainder)
 
-		// Tag ends with ':'
+		// Tag ends with ':'; remove padding emitted by logcat so alignment stays consistent
 		colonIdx := strings.Index(remainder, ":")
 		if colonIdx >= 0 {
-			entry.Tag = remainder[:colonIdx]
+			tag := strings.TrimSpace(remainder[:colonIdx])
+			entry.Tag = tag
 			if colonIdx+1 < len(remainder) {
 				entry.Message = strings.TrimSpace(remainder[colonIdx+1:])
 			}
