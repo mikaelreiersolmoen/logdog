@@ -8,7 +8,7 @@ import (
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 )
 
-const tagColumnWidth = 20
+const tagColumnWidth = 30
 
 // FormatEntry returns a formatted string representation of the entry
 func FormatEntry(e *logcat.Entry, style lipgloss.Style) string {
@@ -61,7 +61,7 @@ func FormatEntryWithTimestampTagAndIndent(e *logcat.Entry, style lipgloss.Style,
 	var tagStr string
 	if showTag {
 		tagText := truncate(e.Tag, tagColumnWidth)
-		tagStr = tagStyle.Render(fmt.Sprintf("%-*s", tagColumnWidth, tagText))
+		tagStr = tagStyle.Render(fmt.Sprintf("%*s", tagColumnWidth, tagText))
 	} else {
 		tagStr = strings.Repeat(" ", tagColumnWidth)
 	}
@@ -119,7 +119,7 @@ func FormatEntryWithTagAndMessageStyle(e *logcat.Entry, style lipgloss.Style, sh
 	var tagStr string
 	if showTag {
 		tagText := truncate(e.Tag, tagColumnWidth)
-		tagStr = tagStyle.Render(fmt.Sprintf("%-*s", tagColumnWidth, tagText))
+		tagStr = tagStyle.Render(fmt.Sprintf("%*s", tagColumnWidth, tagText))
 	} else {
 		tagStr = strings.Repeat(" ", tagColumnWidth)
 	}

@@ -824,7 +824,7 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 	var tagStr string
 	if showTag {
 		tagText := truncateString(entry.Tag, tagColumnWidth)
-		tagStr = tagStyle.Render(fmt.Sprintf("%-*s", tagColumnWidth, tagText))
+		tagStr = tagStyle.Render(fmt.Sprintf("%*s", tagColumnWidth, tagText))
 	} else {
 		tagStr = bgStyle.Render(strings.Repeat(" ", tagColumnWidth))
 	}
