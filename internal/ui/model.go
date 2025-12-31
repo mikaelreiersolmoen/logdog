@@ -148,6 +148,7 @@ type Model struct {
 	devices          []adb.Device
 	selectedDevice   string // Device serial or model
 	errorMessage     string
+	showTimestamp    bool
 	showClearConfirm bool
 	clearInput       textinput.Model
 }
@@ -245,6 +246,7 @@ func NewModel(appID string, tailSize int) Model {
 			selectedDevice:   devices[0].Model,
 			showClearConfirm: false,
 			clearInput:       clearInput,
+			showTimestamp:    true,
 		}
 	}
 
@@ -272,6 +274,7 @@ func NewModel(appID string, tailSize int) Model {
 		selectedDevice:   "",
 		showClearConfirm: false,
 		clearInput:       clearInput,
+		showTimestamp:    true,
 	}
 }
 
@@ -522,6 +525,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.updateViewportWithScroll(false)
 				return m, nil
+			case "z", "Z":
+				m.showTimestamp = !m.showTimestamp
+				m.updateViewportWithScroll(false)
+				return m, nil
 			}
 		}
 
@@ -723,7 +730,7 @@ func (m Model) View() string {
 		selectionInfo := "SELECTION | j/k: extend | c: copy lines | C: copy messages | esc: cancel"
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear | v: select | l: log level | f: filter"
+		baseHelp := "q: quit | c: clear | v: select | l: log level | f: filter | z: clean mode"
 		footer = footerStyle.Render(baseHelp)
 	}
 
@@ -763,7 +770,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 				// Subtle highlight style - whole line background
 				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
 			} else {
-				line = FormatEntryWithTagAndIndent(entry, lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent)
+				line = FormatEntryWithTimestampTagAndIndent(entry, lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent, m.showTimestamp)
 			}
 
 			lines = append(lines, line)
@@ -814,14 +821,12 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 		Foreground(priorityColor).
 		Background(bgStyle.GetBackground())
 
-	timestampStyle := lipgloss.NewStyle().
-		Background(bgStyle.GetBackground())
-
 	var tagStr string
 	if showTag {
-		tagStr = tagStyle.Render(fmt.Sprintf("%-20s", truncateString(entry.Tag, 20)))
+		tagText := truncateString(entry.Tag, tagColumnWidth)
+		tagStr = tagStyle.Render(fmt.Sprintf("%-*s", tagColumnWidth, tagText))
 	} else {
-		tagStr = bgStyle.Render(strings.Repeat(" ", 20))
+		tagStr = bgStyle.Render(strings.Repeat(" ", tagColumnWidth))
 	}
 
 	// Add indentation if requested (for stack traces with matching timestamps)
@@ -830,10 +835,9 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 		message = "    " + message
 	}
 
-	return fmt.Sprintf("%s %s %s %s",
-		timestampStyle.Render(entry.Timestamp),
-		priorityStyle.Render(entry.Priority.String()),
+	return fmt.Sprintf("%s %s %s",
 		tagStr,
+		priorityStyle.Render(entry.Priority.String()),
 		messageStyle.Render(message),
 	)
 }
