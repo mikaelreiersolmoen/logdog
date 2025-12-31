@@ -24,7 +24,7 @@ var tagColors = []lipgloss.AdaptiveColor{
 	{Light: "90", Dark: "182"},  // Pastel violet
 	{Light: "131", Dark: "217"}, // Pastel tan
 	{Light: "65", Dark: "152"},  // Pastel mint
-	{Light: "98", Dark: "190"},  // Pastel mauve
+	{Light: "98", Dark: "193"},  // Pastel mauve
 }
 
 // Color palette for filter badges - very subtle muted colors
