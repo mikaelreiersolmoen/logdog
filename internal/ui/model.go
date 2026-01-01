@@ -730,7 +730,7 @@ func (m Model) View() string {
 		selectionInfo := "SELECTION | j/k: extend | c: copy lines | C: copy messages | esc: cancel"
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear | v: select | l: log level | f: filter | z: clean mode"
+		baseHelp := "q: quit | c: clear | v: select | l: log level | f: filter | z: toggle timestamp"
 		footer = footerStyle.Render(baseHelp)
 	}
 
@@ -835,11 +835,18 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 		message = "    " + message
 	}
 
-	return fmt.Sprintf("%s %s %s",
-		tagStr,
-		priorityStyle.Render(entry.Priority.String()),
-		messageStyle.Render(message),
-	)
+	priorityStr := priorityStyle.Render(entry.Priority.String())
+	messageStr := messageStyle.Render(message)
+
+	if m.showTimestamp {
+		timestampStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "238", Dark: "250"}).
+			Background(bgStyle.GetBackground())
+		timestampStr := timestampStyle.Render(fmt.Sprintf("%-*s", timestampColumnWidth, entry.Timestamp))
+		return fmt.Sprintf("%s %s %s %s", timestampStr, tagStr, priorityStr, messageStr)
+	}
+
+	return fmt.Sprintf("%s %s %s", tagStr, priorityStr, messageStr)
 }
 
 func truncateString(s string, maxLen int) string {
