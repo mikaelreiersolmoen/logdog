@@ -55,9 +55,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check if the model has an error message to display
-	if finalModel, ok := finalModel.(ui.Model); ok && finalModel.ErrorMessage() != "" {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", finalModel.ErrorMessage())
-		os.Exit(1)
+	// Persist preferences and report any final error message
+	if finalModel, ok := finalModel.(ui.Model); ok {
+		if err := finalModel.PersistPreferences(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to save preferences: %v\n", err)
+		}
+		if finalModel.ErrorMessage() != "" {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", finalModel.ErrorMessage())
+			os.Exit(1)
+		}
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mikaelreiersolmoen/logdog/internal/adb"
 	"github.com/mikaelreiersolmoen/logdog/internal/buffer"
+	"github.com/mikaelreiersolmoen/logdog/internal/config"
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 )
 
@@ -168,6 +169,11 @@ type updateViewportMsg struct{}
 type appStatusMsg string
 
 func NewModel(appID string, tailSize int) Model {
+	prefs, prefsLoaded, prefsErr := config.Load()
+	if prefsErr != nil {
+		prefsLoaded = false
+	}
+
 	items := []list.Item{
 		logLevelItem(logcat.Verbose),
 		logLevelItem(logcat.Debug),
@@ -198,11 +204,11 @@ func NewModel(appID string, tailSize int) Model {
 	clearInput.Width = 40
 
 	// Check for multiple devices
-	devices, err := adb.GetDevices()
+	devices, deviceErr := adb.GetDevices()
 	showDeviceSelect := false
 	var deviceList list.Model
 
-	if err == nil && len(devices) > 1 {
+	if deviceErr == nil && len(devices) > 1 {
 		// Multiple devices - show device selector
 		showDeviceSelect = true
 		deviceItems := make([]list.Item, len(devices))
@@ -218,11 +224,11 @@ func NewModel(appID string, tailSize int) Model {
 			Bold(true).
 			Foreground(GetAccentColor()).
 			Padding(0, 1)
-	} else if err == nil && len(devices) == 1 {
+	} else if deviceErr == nil && len(devices) == 1 {
 		// Single device - use it automatically
 		logManager := logcat.NewManager(appID, tailSize)
 		logManager.SetDevice(devices[0].Serial)
-		return Model{
+		model := Model{
 			appID:            appID,
 			buffer:           buffer.NewRingBuffer(10000),
 			logManager:       logManager,
@@ -248,9 +254,13 @@ func NewModel(appID string, tailSize int) Model {
 			clearInput:       clearInput,
 			showTimestamp:    true,
 		}
+		if prefsLoaded {
+			model.applyPreferences(prefs)
+		}
+		return model
 	}
 
-	return Model{
+	model := Model{
 		appID:            appID,
 		buffer:           buffer.NewRingBuffer(10000),
 		logManager:       logcat.NewManager(appID, tailSize),
@@ -276,6 +286,88 @@ func NewModel(appID string, tailSize int) Model {
 		clearInput:       clearInput,
 		showTimestamp:    true,
 	}
+
+	if prefsLoaded {
+		model.applyPreferences(prefs)
+	}
+
+	return model
+}
+
+func (m *Model) applyPreferences(prefs config.Preferences) {
+	if priority, ok := priorityFromConfig(prefs.MinLogLevel); ok {
+		m.minLogLevel = priority
+		if priority >= logcat.Verbose && priority <= logcat.Fatal {
+			m.logLevelList.Select(int(priority))
+		}
+	}
+
+	m.showTimestamp = prefs.ShowTimestamp
+
+	if len(prefs.Filters) == 0 {
+		m.filters = []Filter{}
+		m.filterInput.SetValue("")
+		return
+	}
+
+	m.filters = make([]Filter, 0, len(prefs.Filters))
+	filterStrings := make([]string, 0, len(prefs.Filters))
+
+	for _, pref := range prefs.Filters {
+		if pref.Pattern == "" {
+			continue
+		}
+
+		regex, err := regexp.Compile("(?i)" + pref.Pattern)
+		if err != nil {
+			continue
+		}
+
+		m.filters = append(m.filters, Filter{
+			isTag:   pref.IsTag,
+			pattern: pref.Pattern,
+			regex:   regex,
+		})
+		filterStrings = append(filterStrings, formatFilterPreference(pref))
+	}
+
+	if len(filterStrings) > 0 {
+		m.filterInput.SetValue(strings.Join(filterStrings, ", "))
+	} else {
+		m.filterInput.SetValue("")
+	}
+}
+
+func priorityFromConfig(value string) (logcat.Priority, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, false
+	}
+
+	switch strings.ToUpper(trimmed) {
+	case "V", "VERBOSE":
+		return logcat.Verbose, true
+	case "D", "DEBUG":
+		return logcat.Debug, true
+	case "I", "INFO":
+		return logcat.Info, true
+	case "W", "WARN", "WARNING":
+		return logcat.Warn, true
+	case "E", "ERROR":
+		return logcat.Error, true
+	case "F", "FATAL":
+		return logcat.Fatal, true
+	default:
+		return 0, false
+	}
+}
+
+func formatFilterPreference(pref config.FilterPreference) string {
+	pattern := strings.ReplaceAll(pref.Pattern, ",", "\\,")
+	if pref.IsTag {
+		return "tag:" + pattern
+	}
+	return pattern
 }
 
 func (m Model) Init() tea.Cmd {
@@ -1363,6 +1455,24 @@ func (m *Model) copySelectedMessagesOnly() {
 	cmd := exec.Command("pbcopy")
 	cmd.Stdin = strings.NewReader(clipboard)
 	cmd.Run()
+}
+
+func (m Model) PersistPreferences() error {
+	filterPrefs := make([]config.FilterPreference, 0, len(m.filters))
+	for _, filter := range m.filters {
+		filterPrefs = append(filterPrefs, config.FilterPreference{
+			IsTag:   filter.isTag,
+			Pattern: filter.pattern,
+		})
+	}
+
+	prefs := config.Preferences{
+		Filters:       filterPrefs,
+		MinLogLevel:   m.minLogLevel.String(),
+		ShowTimestamp: m.showTimestamp,
+	}
+
+	return config.Save(prefs)
 }
 
 // ErrorMessage returns any error message from the model
