@@ -52,7 +52,7 @@ go build -o logdog .
 
 ### Filtering
 
-Filters are defined in a single input, separated by comma. To filter on tags, use a tag prefix like so: `tag:MyTag`. Filters without the tag prefix are applied to the log message. With filters applied, log entries are shown if they match _any_ of the tag filters, and _all_ of the message filters.
+Filters are defined in a single input, separated by comma. To filter on tags, use a tag prefix like so: `tag:MyTag`. Filters without the tag prefix are applied to the log message. With filters applied, log entries are shown if they match _any_ of the tag filters, and _all_ of the message filters. Filters are treated as regular expressions (Go RE2 syntax). Use `\` to escape and include comma (`,`) in a filter.
 
 ### Highlighting
 
