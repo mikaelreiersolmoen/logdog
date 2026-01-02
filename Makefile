@@ -1,4 +1,4 @@
-.PHONY: build run clean install test help build-macos build-linux build-windows build-all
+.PHONY: build run clean install test help build-macos build-linux build-windows build-all checksums
 
 BINARY_NAME=logdog
 BUILD_DIR=.
@@ -16,6 +16,7 @@ help:
 	@echo "  make build-linux - Build Linux amd64 and arm64 binaries"
 	@echo "  make build-windows - Build Windows amd64 and arm64 binaries"
 	@echo "  make build-all - Build macOS, Linux, and Windows binaries"
+	@echo "  make checksums - Generate SHA256 checksums for build artifacts"
 
 build:
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
@@ -39,6 +40,9 @@ build-windows:
 	cd $(DIST_DIR) && zip -q $(BINARY_NAME)-windows.zip $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-windows-arm64.exe
 
 build-all: build-macos build-linux build-windows
+
+checksums:
+	cd $(DIST_DIR) && find . -type f -maxdepth 1 ! -name checksums.txt ! -name ".*" -print0 | sort -z | xargs -0 shasum -a 256 > checksums.txt
 
 run:
 	go run $(MAIN_PATH) $(ARGS)
