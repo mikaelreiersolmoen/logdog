@@ -143,6 +143,8 @@ type Model struct {
 	selectionMode    bool
 	selectedEntries  map[*logcat.Entry]bool
 	selectionAnchor  *logcat.Entry
+	lineEntries      []*logcat.Entry
+	entryLineRanges  map[*logcat.Entry]entryLineRange
 	autoScroll       bool
 	showDeviceSelect bool
 	deviceList       list.Model
@@ -167,6 +169,11 @@ type Filter struct {
 type logLineMsg string
 type updateViewportMsg struct{}
 type appStatusMsg string
+
+type entryLineRange struct {
+	start int
+	end   int
+}
 
 func NewModel(appID string, tailSize int) Model {
 	prefs, prefsLoaded, prefsErr := config.Load()
@@ -846,6 +853,8 @@ func (m *Model) updateViewport() {
 
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
+	lineEntries := make([]*logcat.Entry, 0, len(m.parsedEntries))
+	entryLineRanges := make(map[*logcat.Entry]entryLineRange, len(m.parsedEntries))
 	var lastTag string
 	var lastTimestamp string
 	var lastWasContinuation bool
@@ -878,7 +887,14 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, m.viewport.Width)
 			}
 
+			startLine := len(lineEntries)
 			lines = append(lines, entryLines...)
+			for range entryLines {
+				lineEntries = append(lineEntries, entry)
+			}
+			if len(entryLines) > 0 {
+				entryLineRanges[entry] = entryLineRange{start: startLine, end: len(lineEntries) - 1}
+			}
 			lastTag = entry.Tag
 			lastTimestamp = entry.Timestamp
 			lastWasContinuation = continuation
@@ -887,6 +903,8 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	m.viewport.SetContent(content)
+	m.lineEntries = lineEntries
+	m.entryLineRanges = entryLineRanges
 
 	if scrollToBottom {
 		m.viewport.GotoBottom()
@@ -1146,17 +1164,22 @@ func (m *Model) handleMouseClick(y int) {
 	// Add viewport scroll offset to get actual line in content
 	clickedLine := lineInViewport + m.viewport.YOffset
 
-	visible := m.getVisibleEntries()
-	if clickedLine >= 0 && clickedLine < len(visible) {
-		clickedEntry := visible[clickedLine]
+	if clickedLine < 0 || clickedLine >= len(m.lineEntries) {
+		return
+	}
 
-		if m.selectionMode {
-			// In selection mode: extend selection to clicked entry
-			m.extendSelectionTo(clickedEntry, visible)
-		} else {
-			// Not in selection mode: just highlight
-			m.highlightedEntry = clickedEntry
-		}
+	clickedEntry := m.lineEntries[clickedLine]
+	if clickedEntry == nil {
+		return
+	}
+
+	visible := m.getVisibleEntries()
+	if m.selectionMode {
+		// In selection mode: extend selection to clicked entry
+		m.extendSelectionTo(clickedEntry, visible)
+	} else {
+		// Not in selection mode: just highlight
+		m.highlightedEntry = clickedEntry
 	}
 }
 
@@ -1197,10 +1220,43 @@ func (m *Model) extendSelectionTo(target *logcat.Entry, visible []*logcat.Entry)
 	}
 }
 
-// ensureLineVisible scrolls the viewport to ensure the line at the given index is visible
-func (m *Model) ensureLineVisible(lineNumber int) {
+func (m *Model) entryLineRange(entry *logcat.Entry) (int, int, bool) {
+	if entry == nil {
+		return 0, 0, false
+	}
+	if m.entryLineRanges != nil {
+		if r, ok := m.entryLineRanges[entry]; ok {
+			return r.start, r.end, true
+		}
+	}
+
+	start := -1
+	end := -1
+	for i, e := range m.lineEntries {
+		if e == entry {
+			if start == -1 {
+				start = i
+			}
+			end = i
+		}
+	}
+
+	if start == -1 {
+		return 0, 0, false
+	}
+
+	return start, end, true
+}
+
+// ensureLineVisible scrolls the viewport to ensure the entry at the given index is visible.
+func (m *Model) ensureLineVisible(entryIndex int) {
 	visible := m.getVisibleEntries()
-	if len(visible) == 0 || lineNumber < 0 || lineNumber >= len(visible) {
+	if len(visible) == 0 || entryIndex < 0 || entryIndex >= len(visible) {
+		return
+	}
+
+	startLine, endLine, ok := m.entryLineRange(visible[entryIndex])
+	if !ok {
 		return
 	}
 
@@ -1208,13 +1264,13 @@ func (m *Model) ensureLineVisible(lineNumber int) {
 	viewportBottom := m.viewport.YOffset + m.viewport.Height - 1
 
 	// If line is above viewport, scroll up to show it
-	if lineNumber < viewportTop {
-		m.viewport.SetYOffset(lineNumber)
+	if startLine < viewportTop {
+		m.viewport.SetYOffset(startLine)
 	}
 
 	// If line is below viewport, scroll down to show it at the bottom
-	if lineNumber > viewportBottom {
-		newOffset := lineNumber - m.viewport.Height + 1
+	if endLine > viewportBottom {
+		newOffset := endLine - m.viewport.Height + 1
 		if newOffset < 0 {
 			newOffset = 0
 		}
@@ -1229,22 +1285,9 @@ func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
 		return
 	}
 
-	visible := m.getVisibleEntries()
-	if len(visible) == 0 {
+	startLine, endLine, ok := m.entryLineRange(entry)
+	if !ok {
 		return
-	}
-
-	// Find the line number of the entry in the visible entries list
-	lineNumber := -1
-	for i, e := range visible {
-		if e == entry {
-			lineNumber = i
-			break
-		}
-	}
-
-	if lineNumber == -1 {
-		return // Entry not found in visible entries
 	}
 
 	// Check if the line is currently visible in the viewport
@@ -1252,9 +1295,10 @@ func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
 	viewportBottom := m.viewport.YOffset + m.viewport.Height - 1
 
 	// If the line is not visible, center it in the viewport
-	if lineNumber < viewportTop || lineNumber > viewportBottom {
+	if startLine < viewportTop || endLine > viewportBottom {
+		centerLine := startLine + (endLine-startLine)/2
 		// Calculate offset to center the line in the viewport
-		centerOffset := lineNumber - m.viewport.Height/2
+		centerOffset := centerLine - m.viewport.Height/2
 
 		// Ensure we don't scroll before the start
 		if centerOffset < 0 {
@@ -1262,7 +1306,7 @@ func (m *Model) ensureEntryVisible(entry *logcat.Entry) {
 		}
 
 		// Ensure we don't scroll past the end
-		maxOffset := len(visible) - m.viewport.Height
+		maxOffset := len(m.lineEntries) - m.viewport.Height
 		if maxOffset < 0 {
 			maxOffset = 0
 		}
