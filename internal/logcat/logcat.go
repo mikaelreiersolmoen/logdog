@@ -136,16 +136,23 @@ func ParseLine(line string) (*Entry, error) {
 		remainder := line[tagMsgIdx+len(parts[4]):]
 		remainder = strings.TrimSpace(remainder)
 
+		// Remove padding between priority column and tag but preserve message indentation
+		trimmedRemainder := strings.TrimLeft(remainder, " ")
+
 		// Tag ends with ':'; remove padding emitted by logcat so alignment stays consistent
-		colonIdx := strings.Index(remainder, ":")
+		colonIdx := strings.Index(trimmedRemainder, ":")
 		if colonIdx >= 0 {
-			tag := strings.TrimSpace(remainder[:colonIdx])
+			tag := strings.TrimSpace(trimmedRemainder[:colonIdx])
 			entry.Tag = tag
-			if colonIdx+1 < len(remainder) {
-				entry.Message = strings.TrimSpace(remainder[colonIdx+1:])
+			if colonIdx+1 < len(trimmedRemainder) {
+				message := trimmedRemainder[colonIdx+1:]
+				if len(message) > 0 && message[0] == ' ' {
+					message = message[1:]
+				}
+				entry.Message = message
 			}
 		} else {
-			entry.Message = remainder
+			entry.Message = strings.TrimLeft(remainder, " ")
 		}
 	}
 
