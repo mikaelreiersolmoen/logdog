@@ -423,12 +423,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buffer.Add(string(msg))
 		entry, _ := logcat.ParseLine(string(msg))
 		if entry != nil {
-			if len(m.parsedEntries) > 0 {
-				prev := m.parsedEntries[len(m.parsedEntries)-1]
-				if entry.Timestamp == prev.Timestamp && logcat.IsStackTraceLine(entry.Message) {
-					entry.Indent = true
-				}
-			}
 			m.parsedEntries = append(m.parsedEntries, entry)
 			if len(m.parsedEntries) > 10000 {
 				m.parsedEntries = m.parsedEntries[1:]
@@ -860,17 +854,16 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
 			var line string
-			shouldIndent := entry.Indent
 
 			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
 				// Strong selection style - whole-line: highlight all columns while keeping colors
-				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, selectedStyle, shouldIndent)
+				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, selectedStyle)
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
-				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle, shouldIndent)
+				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle)
 			} else {
-				line = FormatEntryWithTimestampTagAndIndent(entry, lipgloss.NewStyle(), entry.Tag != lastTag, shouldIndent, m.showTimestamp)
+				line = FormatEntry(entry, lipgloss.NewStyle(), entry.Tag != lastTag, m.showTimestamp)
 			}
 
 			lines = append(lines, line)
@@ -887,7 +880,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 }
 
 // formatEntryWithAllColumnsSelected formats an entry with background applied to all columns while preserving colors
-func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, indent bool) string {
+func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style) string {
 	// Get color for this priority
 	var priorityColor lipgloss.TerminalColor
 	switch entry.Priority {
@@ -928,11 +921,7 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 		tagStr = bgStyle.Render(strings.Repeat(" ", TagColumnWidth()))
 	}
 
-	// Add indentation if requested (for stack traces with matching timestamps)
 	message := entry.Message
-	if indent {
-		message = entry.MessageWithIndent()
-	}
 
 	priorityStr := priorityStyle.Render(entry.Priority.String())
 	messageStr := messageStyle.Render(message)
@@ -1452,7 +1441,7 @@ func (m *Model) copySelectedMessagesOnly() {
 	var lines []string
 	for _, entry := range visible {
 		if m.selectedEntries[entry] {
-			lines = append(lines, entry.MessageWithIndent())
+			lines = append(lines, entry.Message)
 		}
 	}
 

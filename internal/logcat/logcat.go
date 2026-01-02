@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
@@ -33,10 +32,7 @@ type Entry struct {
 	Tag       string
 	Message   string
 	Raw       string
-	Indent    bool
 }
-
-const stackTraceIndent = "    "
 
 // PriorityFromChar converts a logcat priority character to Priority
 func PriorityFromChar(c rune) Priority {
@@ -159,41 +155,13 @@ func ParseLine(line string) (*Entry, error) {
 // FormatPlain returns a plain text representation without any styling or ANSI codes
 func (e *Entry) FormatPlain() string {
 	tag := strings.TrimRight(e.Tag, " ")
-	message := e.MessageWithIndent()
 
 	return fmt.Sprintf("%s %s %s %s",
 		e.Timestamp,
 		e.Priority.String(),
 		tag,
-		message,
+		e.Message,
 	)
-}
-
-// MessageWithIndent returns the entry message with stack trace indentation applied when needed.
-func (e *Entry) MessageWithIndent() string {
-	if e.Indent {
-		return stackTraceIndent + e.Message
-	}
-	return e.Message
-}
-
-var stackTraceRegex = regexp.MustCompile(`^(?:at\s+[\w.$]+|\.\.\.\s+\d+\s+more)`)
-
-// IsStackTraceLine checks if a message is a stack trace line (exported for use in UI)
-func IsStackTraceLine(message string) bool {
-	return isStackTraceLine(message)
-}
-
-// isStackTraceLine checks if a message is a stack trace line (internal)
-func isStackTraceLine(message string) bool {
-	return stackTraceRegex.MatchString(strings.TrimSpace(message))
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
 }
 
 // Manager manages the logcat process
