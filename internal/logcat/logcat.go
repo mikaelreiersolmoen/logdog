@@ -187,7 +187,7 @@ type Manager struct {
 
 // NewManager creates a new logcat manager
 func NewManager(appID string, tailSize int) *Manager {
-	if tailSize <= 0 {
+	if tailSize < 0 {
 		tailSize = 1000 // Default to 1000 entries
 	}
 	return &Manager{
@@ -211,7 +211,10 @@ func (m *Manager) Start() error {
 	if m.deviceSerial != "" {
 		args = append(args, "-s", m.deviceSerial)
 	}
-	args = append(args, "logcat", "-v", "threadtime", "-T", fmt.Sprintf("%d", m.tailSize))
+	args = append(args, "logcat", "-v", "threadtime")
+	if m.tailSize > 0 {
+		args = append(args, "-T", fmt.Sprintf("%d", m.tailSize))
+	}
 	if m.appID != "" {
 		pid, err := m.getPID()
 		if err != nil {

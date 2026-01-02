@@ -14,7 +14,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mikaelreiersolmoen/logdog/internal/adb"
-	"github.com/mikaelreiersolmoen/logdog/internal/buffer"
 	"github.com/mikaelreiersolmoen/logdog/internal/config"
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 )
@@ -122,7 +121,6 @@ func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 
 type Model struct {
 	viewport         viewport.Model
-	buffer           *buffer.RingBuffer
 	logManager       *logcat.Manager
 	lineChan         chan string
 	ready            bool
@@ -145,6 +143,14 @@ type Model struct {
 	selectionAnchor  *logcat.Entry
 	lineEntries      []*logcat.Entry
 	entryLineRanges  map[*logcat.Entry]entryLineRange
+	renderedLines    []string
+	renderedUpTo     int
+	renderReset      bool
+	viewportContent  string
+	lastRenderedTag  string
+	lastRenderedTime string
+	lastRenderedCont bool
+	renderScheduled  bool
 	wrapLines        bool
 	autoScroll       bool
 	showDeviceSelect bool
@@ -167,7 +173,9 @@ type Filter struct {
 	regex   *regexp.Regexp
 }
 
-type logLineMsg string
+type logLineMsg struct {
+	lines []string
+}
 type updateViewportMsg struct{}
 type appStatusMsg string
 
@@ -211,6 +219,11 @@ func NewModel(appID string, tailSize int) Model {
 	clearInput.CharLimit = 10
 	clearInput.Width = 40
 
+	entryCapacity := 10000
+	if tailSize > 0 {
+		entryCapacity = tailSize
+	}
+
 	// Check for multiple devices
 	devices, deviceErr := adb.GetDevices()
 	showDeviceSelect := false
@@ -238,7 +251,6 @@ func NewModel(appID string, tailSize int) Model {
 		logManager.SetDevice(devices[0].Serial)
 		model := Model{
 			appID:            appID,
-			buffer:           buffer.NewRingBuffer(10000),
 			logManager:       logManager,
 			lineChan:         make(chan string, 100),
 			showLogLevel:     false,
@@ -247,7 +259,7 @@ func NewModel(appID string, tailSize int) Model {
 			showFilter:       false,
 			filterInput:      filterInput,
 			filters:          []Filter{},
-			parsedEntries:    make([]*logcat.Entry, 0, 10000),
+			parsedEntries:    make([]*logcat.Entry, 0, entryCapacity),
 			needsUpdate:      false,
 			highlightedEntry: nil,
 			selectionMode:    false,
@@ -271,7 +283,6 @@ func NewModel(appID string, tailSize int) Model {
 
 	model := Model{
 		appID:            appID,
-		buffer:           buffer.NewRingBuffer(10000),
 		logManager:       logcat.NewManager(appID, tailSize),
 		lineChan:         make(chan string, 100),
 		showLogLevel:     false,
@@ -280,7 +291,7 @@ func NewModel(appID string, tailSize int) Model {
 		showFilter:       false,
 		filterInput:      filterInput,
 		filters:          []Filter{},
-		parsedEntries:    make([]*logcat.Entry, 0, 10000),
+		parsedEntries:    make([]*logcat.Entry, 0, entryCapacity),
 		needsUpdate:      false,
 		highlightedEntry: nil,
 		selectionMode:    false,
@@ -355,6 +366,18 @@ func (m *Model) applyPreferences(prefs config.Preferences) {
 	}
 }
 
+func (m *Model) resetRenderCache() {
+	m.renderedLines = nil
+	m.lineEntries = nil
+	m.entryLineRanges = nil
+	m.viewportContent = ""
+	m.renderedUpTo = 0
+	m.lastRenderedTag = ""
+	m.lastRenderedTime = ""
+	m.lastRenderedCont = false
+	m.renderReset = true
+}
+
 func priorityFromConfig(value string) (logcat.Priority, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -396,7 +419,6 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		startLogcat(m.logManager, m.lineChan),
 		waitForLogLine(m.lineChan),
-		tickViewportUpdate(),
 	}
 
 	// If filtering by app, listen for status updates
@@ -429,17 +451,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.width = msg.Width
 		m.height = msg.Height
+		m.renderReset = true
+		m.needsUpdate = true
+		if !m.renderScheduled {
+			m.renderScheduled = true
+			cmds = append(cmds, scheduleViewportUpdate())
+		}
 
 	case logLineMsg:
-		m.buffer.Add(string(msg))
-		entry, _ := logcat.ParseLine(string(msg))
-		if entry != nil {
-			m.parsedEntries = append(m.parsedEntries, entry)
-			if len(m.parsedEntries) > 10000 {
-				m.parsedEntries = m.parsedEntries[1:]
+		for _, line := range msg.lines {
+			entry, _ := logcat.ParseLine(line)
+			if entry != nil {
+				m.parsedEntries = append(m.parsedEntries, entry)
 			}
 		}
 		m.needsUpdate = true
+		if !m.renderScheduled {
+			m.renderScheduled = true
+			cmds = append(cmds, scheduleViewportUpdate())
+		}
 
 		if !m.terminating {
 			cmds = append(cmds, waitForLogLine(m.lineChan))
@@ -452,12 +482,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case updateViewportMsg:
+		m.renderScheduled = false
 		if m.needsUpdate && m.ready {
 			m.updateViewportWithScroll(m.autoScroll)
 			m.needsUpdate = false
 		}
-		if !m.terminating {
-			cmds = append(cmds, tickViewportUpdate())
+		if m.needsUpdate && !m.renderScheduled {
+			m.renderScheduled = true
+			cmds = append(cmds, scheduleViewportUpdate())
 		}
 
 	case errMsg:
@@ -482,7 +514,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds := []tea.Cmd{
 						startLogcat(m.logManager, m.lineChan),
 						waitForLogLine(m.lineChan),
-						tickViewportUpdate(),
 					}
 					if m.appID != "" {
 						cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
@@ -500,37 +531,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if i, ok := m.logLevelList.SelectedItem().(logLevelItem); ok {
 					m.minLogLevel = logcat.Priority(i)
 					m.showLogLevel = false
+					m.resetRenderCache()
 					m.updateViewport()
 				}
 				return m, nil
 			case "v":
 				m.minLogLevel = logcat.Verbose
 				m.showLogLevel = false
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			case "d":
 				m.minLogLevel = logcat.Debug
 				m.showLogLevel = false
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			case "i":
 				m.minLogLevel = logcat.Info
 				m.showLogLevel = false
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			case "w":
 				m.minLogLevel = logcat.Warn
 				m.showLogLevel = false
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			case "e":
 				m.minLogLevel = logcat.Error
 				m.showLogLevel = false
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			case "f":
 				m.minLogLevel = logcat.Fatal
 				m.showLogLevel = false
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			}
@@ -544,6 +582,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.parseFilters(m.filterInput.Value())
 				m.showFilter = false
 				m.filterInput.Blur()
+				m.resetRenderCache()
 				m.updateViewport()
 				return m, nil
 			}
@@ -558,10 +597,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				input := strings.ToLower(strings.TrimSpace(m.clearInput.Value()))
 				if input == "y" || input == "yes" {
 					// Clear the log display
-					m.buffer.Clear()
 					m.parsedEntries = make([]*logcat.Entry, 0, 10000)
 					m.highlightedEntry = nil
 					m.clearSelection()
+					m.resetRenderCache()
 					m.updateViewport()
 				}
 				m.showClearConfirm = false
@@ -588,11 +627,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.clearSelection()
 				}
 				m.highlightedEntry = nil
+				m.renderReset = true
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "v": // v to enter selection mode
 				m.autoScroll = false
 				m.enterSelectionMode()
+				m.renderReset = true
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "c":
@@ -600,6 +641,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.copySelectedLines()
 					m.clearSelection()
 					m.selectionMode = false
+					m.renderReset = true
 					m.updateViewportWithScroll(false)
 				} else if !m.selectionMode {
 					// Show clear confirmation dialog
@@ -613,6 +655,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.copySelectedMessagesOnly()
 					m.clearSelection()
 					m.selectionMode = false
+					m.renderReset = true
 					m.updateViewportWithScroll(false)
 				}
 				return m, nil
@@ -623,6 +666,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.moveHighlightDown()
 				}
+				m.renderReset = true
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "k", "up":
@@ -632,14 +676,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.moveHighlightUp()
 				}
+				m.renderReset = true
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "z", "Z":
 				m.showTimestamp = !m.showTimestamp
+				m.resetRenderCache()
 				m.updateViewportWithScroll(false)
 				return m, nil
 			case "w", "W":
 				m.wrapLines = !m.wrapLines
+				m.resetRenderCache()
 				m.updateViewportWithScroll(m.autoScroll)
 				return m, nil
 			}
@@ -650,6 +697,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.MouseRelease && msg.Button == tea.MouseButtonLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect {
 			m.autoScroll = false
 			m.handleMouseClick(msg.Y)
+			m.renderReset = true
 			m.updateViewportWithScroll(false)
 			return m, nil
 		}
@@ -860,6 +908,37 @@ func (m *Model) updateViewport() {
 }
 
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
+	if m.renderReset || m.renderedUpTo > len(m.parsedEntries) {
+		m.rebuildViewport(scrollToBottom)
+		m.renderReset = false
+		return
+	}
+
+	if m.renderedUpTo == len(m.parsedEntries) {
+		if scrollToBottom {
+			m.viewport.GotoBottom()
+		}
+		return
+	}
+
+	m.appendViewport(scrollToBottom)
+}
+
+func joinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(line)
+	}
+	return b.String()
+}
+
+func (m *Model) rebuildViewport(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	lineEntries := make([]*logcat.Entry, 0, len(m.parsedEntries))
 	entryLineRanges := make(map[*logcat.Entry]entryLineRange, len(m.parsedEntries))
@@ -872,7 +951,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	var lastWasContinuation bool
 
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
-	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"}) // Subtle highlight
+	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"})
 
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
@@ -887,13 +966,10 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 				}
 			}
 
-			// Apply styles based on selection/highlight state
 			var entryLines []string
 			if m.selectedEntries[entry] {
-				// Strong selection style - whole-line: highlight all columns while keeping colors
 				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
 			} else if entry == m.highlightedEntry {
-				// Subtle highlight style - whole line background
 				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
 			} else {
 				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
@@ -913,10 +989,91 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 		}
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	m.viewport.SetContent(content)
+	m.renderedLines = lines
 	m.lineEntries = lineEntries
 	m.entryLineRanges = entryLineRanges
+	m.lastRenderedTag = lastTag
+	m.lastRenderedTime = lastTimestamp
+	m.lastRenderedCont = lastWasContinuation
+	m.renderedUpTo = len(m.parsedEntries)
+	m.viewportContent = joinLines(lines)
+	m.viewport.SetContent(m.viewportContent)
+
+	if scrollToBottom {
+		m.viewport.GotoBottom()
+	}
+}
+
+func (m *Model) appendViewport(scrollToBottom bool) {
+	if m.entryLineRanges == nil {
+		m.entryLineRanges = make(map[*logcat.Entry]entryLineRange)
+	}
+	maxWidth := 0
+	if m.wrapLines {
+		maxWidth = m.viewport.Width
+	}
+
+	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
+	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"})
+
+	newLines := make([]string, 0)
+	lastTag := m.lastRenderedTag
+	lastTimestamp := m.lastRenderedTime
+	lastWasContinuation := m.lastRenderedCont
+
+	for i := m.renderedUpTo; i < len(m.parsedEntries); i++ {
+		entry := m.parsedEntries[i]
+		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
+			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp
+			showTag := false
+
+			if !continuation {
+				if lastWasContinuation {
+					showTag = true
+				} else {
+					showTag = entry.Tag != lastTag
+				}
+			}
+
+			var entryLines []string
+			if m.selectedEntries[entry] {
+				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
+			} else if entry == m.highlightedEntry {
+				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
+			} else {
+				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
+			}
+
+			startLine := len(m.lineEntries)
+			newLines = append(newLines, entryLines...)
+			m.renderedLines = append(m.renderedLines, entryLines...)
+			for range entryLines {
+				m.lineEntries = append(m.lineEntries, entry)
+			}
+			if len(entryLines) > 0 {
+				m.entryLineRanges[entry] = entryLineRange{start: startLine, end: len(m.lineEntries) - 1}
+			}
+
+			lastTag = entry.Tag
+			lastTimestamp = entry.Timestamp
+			lastWasContinuation = continuation
+		}
+	}
+
+	m.lastRenderedTag = lastTag
+	m.lastRenderedTime = lastTimestamp
+	m.lastRenderedCont = lastWasContinuation
+	m.renderedUpTo = len(m.parsedEntries)
+
+	if len(newLines) > 0 {
+		chunk := joinLines(newLines)
+		if m.viewportContent == "" {
+			m.viewportContent = chunk
+		} else {
+			m.viewportContent += "\n" + chunk
+		}
+		m.viewport.SetContent(m.viewportContent)
+	}
 
 	if scrollToBottom {
 		m.viewport.GotoBottom()
@@ -1125,13 +1282,27 @@ func startLogcat(manager *logcat.Manager, lineChan chan string) tea.Cmd {
 	}
 }
 
+const maxLogBatch = 200
+
 func waitForLogLine(lineChan <-chan string) tea.Cmd {
 	return func() tea.Msg {
 		line, ok := <-lineChan
 		if !ok {
 			return nil
 		}
-		return logLineMsg(line)
+		lines := []string{line}
+		for i := 1; i < maxLogBatch; i++ {
+			select {
+			case next, ok := <-lineChan:
+				if !ok {
+					return logLineMsg{lines: lines}
+				}
+				lines = append(lines, next)
+			default:
+				return logLineMsg{lines: lines}
+			}
+		}
+		return logLineMsg{lines: lines}
 	}
 }
 
@@ -1145,8 +1316,10 @@ func waitForStatus(statusChan <-chan string) tea.Cmd {
 	}
 }
 
-func tickViewportUpdate() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
+const renderDebounce = 200 * time.Millisecond
+
+func scheduleViewportUpdate() tea.Cmd {
+	return tea.Tick(renderDebounce, func(time.Time) tea.Msg {
 		return updateViewportMsg{}
 	})
 }

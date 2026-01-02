@@ -17,8 +17,8 @@ func main() {
 	var tailSize int
 	flag.StringVar(&appID, "app", "", "Application ID to filter logcat logs (optional)")
 	flag.StringVar(&appID, "a", "", "Application ID to filter logcat logs (shorthand)")
-	flag.IntVar(&tailSize, "tail", 1000, "Number of recent log entries to load initially")
-	flag.IntVar(&tailSize, "t", 1000, "Number of recent log entries to load initially (shorthand)")
+	flag.IntVar(&tailSize, "tail", 1000, "Number of recent log entries to load initially (0 = all)")
+	flag.IntVar(&tailSize, "t", 1000, "Number of recent log entries to load initially (shorthand, 0 = all)")
 	flag.Parse()
 
 	if err := config.EnsureExists(); err != nil {
