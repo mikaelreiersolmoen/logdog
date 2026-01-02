@@ -91,21 +91,24 @@ func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showT
 			timestampContent = fmt.Sprintf("%-*s", timestampColumnWidth, e.Timestamp)
 		}
 		timestampStr := timestampStyle.Render(timestampContent)
-		prefix := fmt.Sprintf("%s %s %s", timestampStr, tagStr, priorityStr)
-		contPrefix := fmt.Sprintf("%s %s %s",
-			timestampStyle.Render(strings.Repeat(" ", timestampColumnWidth)),
-			strings.Repeat(" ", TagColumnWidth()),
-			strings.Repeat(" ", len(e.Priority.String())),
-		)
+		sep := " "
+		prefix := timestampStr + sep + tagStr + sep + priorityStr + sep
+		contPrefix := timestampStyle.Render(strings.Repeat(" ", timestampColumnWidth)) +
+			sep +
+			strings.Repeat(" ", TagColumnWidth()) +
+			sep +
+			strings.Repeat(" ", len(e.Priority.String())) +
+			sep
 		renderOne := func(s string) string { return messageStyle.Render(s) }
 		return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 	}
 
-	prefix := fmt.Sprintf("%s %s", tagStr, priorityStr)
-	contPrefix := fmt.Sprintf("%s %s",
-		strings.Repeat(" ", TagColumnWidth()),
-		strings.Repeat(" ", len(e.Priority.String())),
-	)
+	sep := " "
+	prefix := tagStr + sep + priorityStr + sep
+	contPrefix := strings.Repeat(" ", TagColumnWidth()) +
+		sep +
+		strings.Repeat(" ", len(e.Priority.String())) +
+		sep
 	renderOne := func(s string) string { return messageStyle.Render(s) }
 	return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 }
@@ -122,9 +125,9 @@ func wrapWithPrefix(message string, render func(string) string, prefix, contPref
 		render = func(s string) string { return s }
 	}
 	if maxWidth <= 0 {
-		return []string{fmt.Sprintf("%s %s", prefix, render(message))}
+		return []string{prefix + render(message)}
 	}
-	messageWidth := maxWidth - lipgloss.Width(prefix) - 1
+	messageWidth := maxWidth - lipgloss.Width(prefix)
 	if messageWidth < 1 {
 		messageWidth = 1
 	}
@@ -137,9 +140,9 @@ func wrapWithPrefix(message string, render func(string) string, prefix, contPref
 	for i, line := range lines {
 		rendered := render(line)
 		if i == 0 {
-			out = append(out, fmt.Sprintf("%s %s", prefix, rendered))
+			out = append(out, prefix+rendered)
 		} else {
-			out = append(out, fmt.Sprintf("%s %s", contPrefix, rendered))
+			out = append(out, contPrefix+rendered)
 		}
 	}
 	return out

@@ -974,6 +974,7 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 		priorityStr = priorityStyle.Render(entry.Priority.String())
 	}
 	if m.showTimestamp {
+		sep := bgStyle.Render(" ")
 		timestampStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "238", Dark: "250"}).
 			Background(bgStyle.GetBackground())
@@ -982,21 +983,23 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 			timestampContent = fmt.Sprintf("%-*s", timestampColumnWidth, entry.Timestamp)
 		}
 		timestampStr := timestampStyle.Render(timestampContent)
-		prefix := fmt.Sprintf("%s %s %s", timestampStr, tagStr, priorityStr)
-		contPrefix := fmt.Sprintf("%s %s %s",
-			timestampStyle.Render(strings.Repeat(" ", timestampColumnWidth)),
-			bgStyle.Render(strings.Repeat(" ", TagColumnWidth())),
-			bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))),
-		)
+		prefix := timestampStr + sep + tagStr + sep + priorityStr + sep
+		contPrefix := timestampStyle.Render(strings.Repeat(" ", timestampColumnWidth)) +
+			sep +
+			bgStyle.Render(strings.Repeat(" ", TagColumnWidth())) +
+			sep +
+			bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))) +
+			sep
 		renderOne := func(s string) string { return messageStyle.Render(s) }
 		return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 	}
 
-	prefix := fmt.Sprintf("%s %s", tagStr, priorityStr)
-	contPrefix := fmt.Sprintf("%s %s",
-		bgStyle.Render(strings.Repeat(" ", TagColumnWidth())),
-		bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))),
-	)
+	sep := bgStyle.Render(" ")
+	prefix := tagStr + sep + priorityStr + sep
+	contPrefix := bgStyle.Render(strings.Repeat(" ", TagColumnWidth())) +
+		sep +
+		bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))) +
+		sep
 	renderOne := func(s string) string { return messageStyle.Render(s) }
 	return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 }
