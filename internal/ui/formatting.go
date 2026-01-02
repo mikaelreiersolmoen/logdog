@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
+	"github.com/muesli/reflow/wrap"
 )
 
 const (
@@ -33,6 +34,13 @@ func TagColumnWidth() int {
 // When continuation is true, timestamp, tag, and priority columns are blanked
 // to visually indicate that the entry belongs to the previous timestamp.
 func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, continuation bool) string {
+	lines := FormatEntryLines(e, style, showTag, showTimestamp, continuation, 0)
+	return strings.Join(lines, "\n")
+}
+
+// FormatEntryLines returns formatted lines with ANSI-aware wrapping.
+// maxWidth is the full line width; when <= 0, wrapping is disabled.
+func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, continuation bool, maxWidth int) []string {
 	// Get subtle color based on log level
 	var subtleColor lipgloss.TerminalColor
 	switch e.Priority {
@@ -69,13 +77,11 @@ func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimest
 		tagStr = strings.Repeat(" ", TagColumnWidth())
 	}
 
-	message := e.Message
-
 	priorityStr := strings.Repeat(" ", len(e.Priority.String()))
 	if !continuation {
 		priorityStr = priorityStyle.Render(e.Priority.String())
 	}
-	messageStr := messageStyle.Render(message)
+	message := e.Message
 
 	if showTimestamp {
 		timestampStyle := lipgloss.NewStyle().
@@ -85,10 +91,23 @@ func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimest
 			timestampContent = fmt.Sprintf("%-*s", timestampColumnWidth, e.Timestamp)
 		}
 		timestampStr := timestampStyle.Render(timestampContent)
-		return fmt.Sprintf("%s %s %s %s", timestampStr, tagStr, priorityStr, messageStr)
+		prefix := fmt.Sprintf("%s %s %s", timestampStr, tagStr, priorityStr)
+		contPrefix := fmt.Sprintf("%s %s %s",
+			timestampStyle.Render(strings.Repeat(" ", timestampColumnWidth)),
+			strings.Repeat(" ", TagColumnWidth()),
+			strings.Repeat(" ", len(e.Priority.String())),
+		)
+		renderOne := func(s string) string { return messageStyle.Render(s) }
+		return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 	}
 
-	return fmt.Sprintf("%s %s %s", tagStr, priorityStr, messageStr)
+	prefix := fmt.Sprintf("%s %s", tagStr, priorityStr)
+	contPrefix := fmt.Sprintf("%s %s",
+		strings.Repeat(" ", TagColumnWidth()),
+		strings.Repeat(" ", len(e.Priority.String())),
+	)
+	renderOne := func(s string) string { return messageStyle.Render(s) }
+	return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 }
 
 func truncate(s string, maxLen int) string {
@@ -96,4 +115,32 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen]
+}
+
+func wrapWithPrefix(message string, render func(string) string, prefix, contPrefix string, maxWidth int) []string {
+	if render == nil {
+		render = func(s string) string { return s }
+	}
+	if maxWidth <= 0 {
+		return []string{fmt.Sprintf("%s %s", prefix, render(message))}
+	}
+	messageWidth := maxWidth - lipgloss.Width(prefix) - 1
+	if messageWidth < 1 {
+		messageWidth = 1
+	}
+	wrapped := wrap.String(message, messageWidth)
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		rendered := render(line)
+		if i == 0 {
+			out = append(out, fmt.Sprintf("%s %s", prefix, rendered))
+		} else {
+			out = append(out, fmt.Sprintf("%s %s", contPrefix, rendered))
+		}
+	}
+	return out
 }

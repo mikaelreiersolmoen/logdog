@@ -855,7 +855,6 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-			var line string
 			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp
 			showTag := false
 
@@ -868,17 +867,18 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 			}
 
 			// Apply styles based on selection/highlight state
+			var entryLines []string
 			if m.selectedEntries[entry] {
 				// Strong selection style - whole-line: highlight all columns while keeping colors
-				line = m.formatEntryWithAllColumnsSelected(entry, showTag, selectedStyle, continuation)
+				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, m.viewport.Width)
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
-				line = m.formatEntryWithAllColumnsSelected(entry, showTag, highlightStyle, continuation)
+				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, m.viewport.Width)
 			} else {
-				line = FormatEntry(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation)
+				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, m.viewport.Width)
 			}
 
-			lines = append(lines, line)
+			lines = append(lines, entryLines...)
 			lastTag = entry.Tag
 			lastTimestamp = entry.Timestamp
 			lastWasContinuation = continuation
@@ -896,7 +896,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 // formatEntryWithAllColumnsSelected formats an entry with background applied to all columns while preserving colors.
 // When continuation is true, timestamp, tag, and priority columns are rendered as blank spaces to visually
 // connect entries sharing the same timestamp.
-func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, continuation bool) string {
+func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, continuation bool, maxWidth int) []string {
 	// Get color for this priority
 	var priorityColor lipgloss.TerminalColor
 	switch entry.Priority {
@@ -943,8 +943,6 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 	if !continuation {
 		priorityStr = priorityStyle.Render(entry.Priority.String())
 	}
-	messageStr := messageStyle.Render(message)
-
 	if m.showTimestamp {
 		timestampStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "238", Dark: "250"}).
@@ -954,10 +952,23 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 			timestampContent = fmt.Sprintf("%-*s", timestampColumnWidth, entry.Timestamp)
 		}
 		timestampStr := timestampStyle.Render(timestampContent)
-		return fmt.Sprintf("%s %s %s %s", timestampStr, tagStr, priorityStr, messageStr)
+		prefix := fmt.Sprintf("%s %s %s", timestampStr, tagStr, priorityStr)
+		contPrefix := fmt.Sprintf("%s %s %s",
+			timestampStyle.Render(strings.Repeat(" ", timestampColumnWidth)),
+			bgStyle.Render(strings.Repeat(" ", TagColumnWidth())),
+			bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))),
+		)
+		renderOne := func(s string) string { return messageStyle.Render(s) }
+		return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 	}
 
-	return fmt.Sprintf("%s %s %s", tagStr, priorityStr, messageStr)
+	prefix := fmt.Sprintf("%s %s", tagStr, priorityStr)
+	contPrefix := fmt.Sprintf("%s %s",
+		bgStyle.Render(strings.Repeat(" ", TagColumnWidth())),
+		bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))),
+	)
+	renderOne := func(s string) string { return messageStyle.Render(s) }
+	return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
 }
 
 func truncateString(s string, maxLen int) string {
