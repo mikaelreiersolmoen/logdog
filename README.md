@@ -2,6 +2,8 @@
 
 A text-based interface for viewing and filtering Android logcat.
 
+![logdog screenshot](screenshot.png)
+
 ## Features
 
 - Filter logs by application ID
