@@ -83,8 +83,8 @@ func FormatEntryWithTimestampTagAndIndent(e *logcat.Entry, style lipgloss.Style,
 	}
 
 	message := e.Message
-	if indent && logcat.IsStackTraceLine(message) {
-		message = "    " + message
+	if indent {
+		message = e.MessageWithIndent()
 	}
 
 	priorityStr := priorityStyle.Render(e.Priority.String())
@@ -138,8 +138,8 @@ func FormatEntryWithTagAndMessageStyle(e *logcat.Entry, style lipgloss.Style, sh
 	}
 
 	message := e.Message
-	if indent && logcat.IsStackTraceLine(message) {
-		message = "    " + message
+	if indent {
+		message = e.MessageWithIndent()
 	}
 
 	return fmt.Sprintf("%s %s %s", tagStr, priorityStyle.Render(e.Priority.String()), messageStyle.Render(message))

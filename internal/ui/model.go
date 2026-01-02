@@ -423,6 +423,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buffer.Add(string(msg))
 		entry, _ := logcat.ParseLine(string(msg))
 		if entry != nil {
+			if len(m.parsedEntries) > 0 {
+				prev := m.parsedEntries[len(m.parsedEntries)-1]
+				if entry.Timestamp == prev.Timestamp && logcat.IsStackTraceLine(entry.Message) {
+					entry.Indent = true
+				}
+			}
 			m.parsedEntries = append(m.parsedEntries, entry)
 			if len(m.parsedEntries) > 10000 {
 				m.parsedEntries = m.parsedEntries[1:]
@@ -847,7 +853,6 @@ func (m *Model) updateViewport() {
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
-	var lastTimestamp string
 
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
 	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"}) // Subtle highlight
@@ -855,10 +860,7 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
 			var line string
-
-			// Check if this should be indented (stack trace continuation with same timestamp)
-			shouldIndent := entry.Timestamp == lastTimestamp &&
-				logcat.IsStackTraceLine(entry.Message)
+			shouldIndent := entry.Indent
 
 			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
@@ -873,7 +875,6 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 
 			lines = append(lines, line)
 			lastTag = entry.Tag
-			lastTimestamp = entry.Timestamp
 		}
 	}
 
@@ -929,8 +930,8 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 
 	// Add indentation if requested (for stack traces with matching timestamps)
 	message := entry.Message
-	if indent && logcat.IsStackTraceLine(message) {
-		message = "    " + message
+	if indent {
+		message = entry.MessageWithIndent()
 	}
 
 	priorityStr := priorityStyle.Render(entry.Priority.String())
@@ -1451,8 +1452,7 @@ func (m *Model) copySelectedMessagesOnly() {
 	var lines []string
 	for _, entry := range visible {
 		if m.selectedEntries[entry] {
-			// Copy only the message
-			lines = append(lines, entry.Message)
+			lines = append(lines, entry.MessageWithIndent())
 		}
 	}
 
