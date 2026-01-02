@@ -4,6 +4,7 @@ BINARY_NAME=logdog
 BUILD_DIR=.
 DIST_DIR=build
 MAIN_PATH=main.go
+VERSION?=dev
 
 help:
 	@echo "Available commands:"
@@ -23,21 +24,21 @@ build:
 
 build-macos:
 	mkdir -p $(DIST_DIR)
-	GOOS=darwin GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
-	tar -czf $(DIST_DIR)/$(BINARY_NAME)-macos.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-darwin-amd64 $(BINARY_NAME)-darwin-arm64
+	GOOS=darwin GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-darwin-amd64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-darwin-arm64 $(MAIN_PATH)
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-darwin-amd64 $(BINARY_NAME)-$(VERSION)-darwin-arm64
 
 build-linux:
 	mkdir -p $(DIST_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
-	GOOS=linux GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
-	tar -czf $(DIST_DIR)/$(BINARY_NAME)-linux.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-linux-arm64
+	GOOS=linux GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64 $(MAIN_PATH)
+	GOOS=linux GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-arm64 $(MAIN_PATH)
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-linux-amd64 $(BINARY_NAME)-$(VERSION)-linux-arm64
 
 build-windows:
 	mkdir -p $(DIST_DIR)
-	GOOS=windows GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
-	GOOS=windows GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-windows-arm64.exe $(MAIN_PATH)
-	cd $(DIST_DIR) && zip -q $(BINARY_NAME)-windows.zip $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-windows-arm64.exe
+	GOOS=windows GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-amd64.exe $(MAIN_PATH)
+	GOOS=windows GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-arm64.exe $(MAIN_PATH)
+	cd $(DIST_DIR) && zip -q $(BINARY_NAME)-$(VERSION)-windows.zip $(BINARY_NAME)-$(VERSION)-windows-amd64.exe $(BINARY_NAME)-$(VERSION)-windows-arm64.exe
 
 build-all: build-macos build-linux build-windows
 
