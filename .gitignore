@@ -19,6 +19,7 @@ go.work
 
 # Application binary
 logdog
+build/
 
 # IDE
 .idea/
