@@ -9,9 +9,25 @@ import (
 )
 
 const (
-	tagColumnWidth       = 30
-	timestampColumnWidth = 18
+	DefaultTagColumnWidth = 30
+	timestampColumnWidth  = 18
 )
+
+var tagColumnWidth = DefaultTagColumnWidth
+
+// SetTagColumnWidth allows adjusting the global tag column width used for rendering.
+func SetTagColumnWidth(width int) {
+	if width <= 0 {
+		tagColumnWidth = DefaultTagColumnWidth
+		return
+	}
+	tagColumnWidth = width
+}
+
+// TagColumnWidth returns the current tag column width.
+func TagColumnWidth() int {
+	return tagColumnWidth
+}
 
 // FormatEntry returns a formatted string representation of the entry
 func FormatEntry(e *logcat.Entry, style lipgloss.Style) string {
@@ -60,10 +76,10 @@ func FormatEntryWithTimestampTagAndIndent(e *logcat.Entry, style lipgloss.Style,
 
 	var tagStr string
 	if showTag {
-		tagText := truncate(e.Tag, tagColumnWidth)
-		tagStr = tagStyle.Render(fmt.Sprintf("%*s", tagColumnWidth, tagText))
+		tagText := truncate(e.Tag, TagColumnWidth())
+		tagStr = tagStyle.Render(fmt.Sprintf("%*s", TagColumnWidth(), tagText))
 	} else {
-		tagStr = strings.Repeat(" ", tagColumnWidth)
+		tagStr = strings.Repeat(" ", TagColumnWidth())
 	}
 
 	message := e.Message
@@ -115,10 +131,10 @@ func FormatEntryWithTagAndMessageStyle(e *logcat.Entry, style lipgloss.Style, sh
 
 	var tagStr string
 	if showTag {
-		tagText := truncate(e.Tag, tagColumnWidth)
-		tagStr = tagStyle.Render(fmt.Sprintf("%*s", tagColumnWidth, tagText))
+		tagText := truncate(e.Tag, TagColumnWidth())
+		tagStr = tagStyle.Render(fmt.Sprintf("%*s", TagColumnWidth(), tagText))
 	} else {
-		tagStr = strings.Repeat(" ", tagColumnWidth)
+		tagStr = strings.Repeat(" ", TagColumnWidth())
 	}
 
 	message := e.Message

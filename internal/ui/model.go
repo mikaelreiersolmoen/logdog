@@ -304,6 +304,12 @@ func (m *Model) applyPreferences(prefs config.Preferences) {
 
 	m.showTimestamp = prefs.ShowTimestamp
 
+	if prefs.TagColumnWidth > 0 {
+		SetTagColumnWidth(prefs.TagColumnWidth)
+	} else {
+		SetTagColumnWidth(DefaultTagColumnWidth)
+	}
+
 	if len(prefs.Filters) == 0 {
 		m.filters = []Filter{}
 		m.filterInput.SetValue("")
@@ -915,10 +921,10 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 
 	var tagStr string
 	if showTag {
-		tagText := truncateString(entry.Tag, tagColumnWidth)
-		tagStr = tagStyle.Render(fmt.Sprintf("%*s", tagColumnWidth, tagText))
+		tagText := truncateString(entry.Tag, TagColumnWidth())
+		tagStr = tagStyle.Render(fmt.Sprintf("%*s", TagColumnWidth(), tagText))
 	} else {
-		tagStr = bgStyle.Render(strings.Repeat(" ", tagColumnWidth))
+		tagStr = bgStyle.Render(strings.Repeat(" ", TagColumnWidth()))
 	}
 
 	// Add indentation if requested (for stack traces with matching timestamps)
@@ -1467,9 +1473,10 @@ func (m Model) PersistPreferences() error {
 	}
 
 	prefs := config.Preferences{
-		Filters:       filterPrefs,
-		MinLogLevel:   m.minLogLevel.String(),
-		ShowTimestamp: m.showTimestamp,
+		Filters:        filterPrefs,
+		MinLogLevel:    m.minLogLevel.String(),
+		ShowTimestamp:  m.showTimestamp,
+		TagColumnWidth: TagColumnWidth(),
 	}
 
 	return config.Save(prefs)

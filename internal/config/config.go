@@ -16,9 +16,10 @@ type FilterPreference struct {
 
 // Preferences holds persisted UI preferences.
 type Preferences struct {
-	Filters       []FilterPreference `json:"filters"`
-	MinLogLevel   string             `json:"minLogLevel"`
-	ShowTimestamp bool               `json:"showTimestamp"`
+	Filters        []FilterPreference `json:"filters"`
+	MinLogLevel    string             `json:"minLogLevel"`
+	ShowTimestamp  bool               `json:"showTimestamp"`
+	TagColumnWidth int                `json:"tagColumnWidth"`
 }
 
 // Load reads preferences from ~/.config/logdog/config.json.
