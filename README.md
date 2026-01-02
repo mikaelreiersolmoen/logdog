@@ -62,6 +62,10 @@ Click on a log entry to highlight it and move the highlight with `up`/`down` or 
 
 `v` to enter selection mode, `up`/`down`, `j`/`k` or mouse click to select multiple lines. `c` to copy entire log, `C` to copy log message only (useful for copying stack traces).
 
+### Configuration
+
+Settings are stored in `~/.config/logdog/config.json`. In addition to persisting selected log level, filters and timestamp toggle, you can also configure preferred tag column width. 
+
 ## Built with
 
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) - TUI framework
