@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -1689,11 +1688,8 @@ func (m *Model) copySelectedLines() {
 		}
 	}
 
-	// Copy to clipboard using pbcopy (macOS) or similar
 	clipboard := strings.Join(lines, "\n")
-	cmd := exec.Command("pbcopy")
-	cmd.Stdin = strings.NewReader(clipboard)
-	cmd.Run()
+	_ = copyToClipboard(clipboard)
 }
 
 // copySelectedMessagesOnly copies only the message column of selected entries to clipboard
@@ -1711,11 +1707,8 @@ func (m *Model) copySelectedMessagesOnly() {
 		}
 	}
 
-	// Copy to clipboard using pbcopy (macOS) or similar
 	clipboard := strings.Join(lines, "\n")
-	cmd := exec.Command("pbcopy")
-	cmd.Stdin = strings.NewReader(clipboard)
-	cmd.Run()
+	_ = copyToClipboard(clipboard)
 }
 
 func (m Model) PersistPreferences() error {
