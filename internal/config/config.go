@@ -20,6 +20,7 @@ type Preferences struct {
 	MinLogLevel    string             `json:"minLogLevel"`
 	ShowTimestamp  bool               `json:"showTimestamp"`
 	TagColumnWidth int                `json:"tagColumnWidth"`
+	WrapLines      bool               `json:"wrapLines"`
 }
 
 // Load reads preferences from ~/.config/logdog/config.json.
@@ -92,6 +93,7 @@ func EnsureExists() error {
 	defaults := Preferences{
 		Filters:       []FilterPreference{},
 		ShowTimestamp: true,
+		WrapLines:     false,
 	}
 
 	return Save(defaults)

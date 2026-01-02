@@ -10,6 +10,7 @@ A text-based interface for viewing and filtering Android logcat.
 - Filter logs by log level
 - Highlight any log entry by clicking it and navigate with up/down
 - Select and copy log content
+- Toggleable line wrapping
 - Pretty colors
 
 ## Installation

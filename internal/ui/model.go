@@ -145,6 +145,7 @@ type Model struct {
 	selectionAnchor  *logcat.Entry
 	lineEntries      []*logcat.Entry
 	entryLineRanges  map[*logcat.Entry]entryLineRange
+	wrapLines        bool
 	autoScroll       bool
 	showDeviceSelect bool
 	deviceList       list.Model
@@ -260,6 +261,7 @@ func NewModel(appID string, tailSize int) Model {
 			showClearConfirm: false,
 			clearInput:       clearInput,
 			showTimestamp:    true,
+			wrapLines:        false,
 		}
 		if prefsLoaded {
 			model.applyPreferences(prefs)
@@ -292,6 +294,7 @@ func NewModel(appID string, tailSize int) Model {
 		showClearConfirm: false,
 		clearInput:       clearInput,
 		showTimestamp:    true,
+		wrapLines:        false,
 	}
 
 	if prefsLoaded {
@@ -310,6 +313,7 @@ func (m *Model) applyPreferences(prefs config.Preferences) {
 	}
 
 	m.showTimestamp = prefs.ShowTimestamp
+	m.wrapLines = prefs.WrapLines
 
 	if prefs.TagColumnWidth > 0 {
 		SetTagColumnWidth(prefs.TagColumnWidth)
@@ -634,6 +638,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showTimestamp = !m.showTimestamp
 				m.updateViewportWithScroll(false)
 				return m, nil
+			case "w", "W":
+				m.wrapLines = !m.wrapLines
+				m.updateViewportWithScroll(m.autoScroll)
+				return m, nil
 			}
 		}
 
@@ -835,7 +843,7 @@ func (m Model) View() string {
 		selectionInfo := "SELECTION | j/k: extend | c: copy lines | C: copy messages | esc: cancel"
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear | click: highlight | v: select | l: log level | f: filter | z: toggle timestamp"
+		baseHelp := "q: quit | c: clear | click: highlight | v: select | l: log level | f: filter | z: toggle timestamp | w: toggle line wrap"
 		footer = footerStyle.Render(baseHelp)
 	}
 
@@ -855,6 +863,10 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	lineEntries := make([]*logcat.Entry, 0, len(m.parsedEntries))
 	entryLineRanges := make(map[*logcat.Entry]entryLineRange, len(m.parsedEntries))
+	maxWidth := 0
+	if m.wrapLines {
+		maxWidth = m.viewport.Width
+	}
 	var lastTag string
 	var lastTimestamp string
 	var lastWasContinuation bool
@@ -879,12 +891,12 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 			var entryLines []string
 			if m.selectedEntries[entry] {
 				// Strong selection style - whole-line: highlight all columns while keeping colors
-				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, m.viewport.Width)
+				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
-				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, m.viewport.Width)
+				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
 			} else {
-				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, m.viewport.Width)
+				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
 			}
 
 			startLine := len(lineEntries)
@@ -1544,6 +1556,7 @@ func (m Model) PersistPreferences() error {
 		MinLogLevel:    m.minLogLevel.String(),
 		ShowTimestamp:  m.showTimestamp,
 		TagColumnWidth: TagColumnWidth(),
+		WrapLines:      m.wrapLines,
 	}
 
 	return config.Save(prefs)
