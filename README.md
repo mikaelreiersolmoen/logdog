@@ -44,6 +44,9 @@ go build -o logdog .
 # Filter by app with custom tail size
 ./logdog --app com.example.app --tail 500
 
+# Filter by app with no (unlimited) tail size
+./logdog --app com.example.app --tail 0
+
 # Using shorthand flags
 ./logdog -a com.example.app -t 2000
 ```
