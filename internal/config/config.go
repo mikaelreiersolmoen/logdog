@@ -71,6 +71,32 @@ func Save(prefs Preferences) error {
 	return nil
 }
 
+// EnsureExists makes sure the preferences file is present with default values.
+func EnsureExists() error {
+	path, err := configFilePath()
+	if err != nil {
+		return err
+	}
+
+	info, statErr := os.Stat(path)
+	if statErr == nil {
+		if info.IsDir() {
+			return fmt.Errorf("config path is a directory: %s", path)
+		}
+		return nil
+	}
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("stat config: %w", statErr)
+	}
+
+	defaults := Preferences{
+		Filters:       []FilterPreference{},
+		ShowTimestamp: true,
+	}
+
+	return Save(defaults)
+}
+
 func configFilePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

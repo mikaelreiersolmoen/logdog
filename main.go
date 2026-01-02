@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mikaelreiersolmoen/logdog/internal/adb"
+	"github.com/mikaelreiersolmoen/logdog/internal/config"
 	"github.com/mikaelreiersolmoen/logdog/internal/logcat"
 	"github.com/mikaelreiersolmoen/logdog/internal/ui"
 )
@@ -19,6 +20,10 @@ func main() {
 	flag.IntVar(&tailSize, "tail", 1000, "Number of recent log entries to load initially")
 	flag.IntVar(&tailSize, "t", 1000, "Number of recent log entries to load initially (shorthand)")
 	flag.Parse()
+
+	if err := config.EnsureExists(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to initialize preferences: %v\n", err)
+	}
 
 	// Validate connectivity before starting UI (only if app filtering is requested and single device)
 	if appID != "" {
