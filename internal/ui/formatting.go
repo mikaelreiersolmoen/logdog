@@ -29,8 +29,10 @@ func TagColumnWidth() int {
 	return tagColumnWidth
 }
 
-// FormatEntry returns a formatted string with optional timestamp display
-func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool) string {
+// FormatEntry returns a formatted string with optional timestamp display.
+// When continuation is true, timestamp, tag, and priority columns are blanked
+// to visually indicate that the entry belongs to the previous timestamp.
+func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, continuation bool) string {
 	// Get subtle color based on log level
 	var subtleColor lipgloss.TerminalColor
 	switch e.Priority {
@@ -60,7 +62,7 @@ func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimest
 	messageStyle := lipgloss.NewStyle().Foreground(subtleColor)
 
 	var tagStr string
-	if showTag {
+	if showTag && !continuation {
 		tagText := truncate(e.Tag, TagColumnWidth())
 		tagStr = tagStyle.Render(fmt.Sprintf("%*s", TagColumnWidth(), tagText))
 	} else {
@@ -69,13 +71,20 @@ func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimest
 
 	message := e.Message
 
-	priorityStr := priorityStyle.Render(e.Priority.String())
+	priorityStr := strings.Repeat(" ", len(e.Priority.String()))
+	if !continuation {
+		priorityStr = priorityStyle.Render(e.Priority.String())
+	}
 	messageStr := messageStyle.Render(message)
 
 	if showTimestamp {
 		timestampStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "238", Dark: "252"})
-		timestampStr := timestampStyle.Render(fmt.Sprintf("%-*s", timestampColumnWidth, e.Timestamp))
+		timestampContent := strings.Repeat(" ", timestampColumnWidth)
+		if !continuation {
+			timestampContent = fmt.Sprintf("%-*s", timestampColumnWidth, e.Timestamp)
+		}
+		timestampStr := timestampStyle.Render(timestampContent)
 		return fmt.Sprintf("%s %s %s %s", timestampStr, tagStr, priorityStr, messageStr)
 	}
 

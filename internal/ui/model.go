@@ -847,6 +847,8 @@ func (m *Model) updateViewport() {
 func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	lines := make([]string, 0, len(m.parsedEntries))
 	var lastTag string
+	var lastTimestamp string
+	var lastWasContinuation bool
 
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
 	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"}) // Subtle highlight
@@ -854,20 +856,32 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
 			var line string
+			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp
+			showTag := false
+
+			if !continuation {
+				if lastWasContinuation {
+					showTag = true
+				} else {
+					showTag = entry.Tag != lastTag
+				}
+			}
 
 			// Apply styles based on selection/highlight state
 			if m.selectedEntries[entry] {
 				// Strong selection style - whole-line: highlight all columns while keeping colors
-				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, selectedStyle)
+				line = m.formatEntryWithAllColumnsSelected(entry, showTag, selectedStyle, continuation)
 			} else if entry == m.highlightedEntry {
 				// Subtle highlight style - whole line background
-				line = m.formatEntryWithAllColumnsSelected(entry, entry.Tag != lastTag, highlightStyle)
+				line = m.formatEntryWithAllColumnsSelected(entry, showTag, highlightStyle, continuation)
 			} else {
-				line = FormatEntry(entry, lipgloss.NewStyle(), entry.Tag != lastTag, m.showTimestamp)
+				line = FormatEntry(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation)
 			}
 
 			lines = append(lines, line)
 			lastTag = entry.Tag
+			lastTimestamp = entry.Timestamp
+			lastWasContinuation = continuation
 		}
 	}
 
@@ -879,8 +893,10 @@ func (m *Model) updateViewportWithScroll(scrollToBottom bool) {
 	}
 }
 
-// formatEntryWithAllColumnsSelected formats an entry with background applied to all columns while preserving colors
-func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style) string {
+// formatEntryWithAllColumnsSelected formats an entry with background applied to all columns while preserving colors.
+// When continuation is true, timestamp, tag, and priority columns are rendered as blank spaces to visually
+// connect entries sharing the same timestamp.
+func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, continuation bool) string {
 	// Get color for this priority
 	var priorityColor lipgloss.TerminalColor
 	switch entry.Priority {
@@ -914,7 +930,7 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 		Background(bgStyle.GetBackground())
 
 	var tagStr string
-	if showTag {
+	if showTag && !continuation {
 		tagText := truncateString(entry.Tag, TagColumnWidth())
 		tagStr = tagStyle.Render(fmt.Sprintf("%*s", TagColumnWidth(), tagText))
 	} else {
@@ -923,14 +939,21 @@ func (m *Model) formatEntryWithAllColumnsSelected(entry *logcat.Entry, showTag b
 
 	message := entry.Message
 
-	priorityStr := priorityStyle.Render(entry.Priority.String())
+	priorityStr := bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String())))
+	if !continuation {
+		priorityStr = priorityStyle.Render(entry.Priority.String())
+	}
 	messageStr := messageStyle.Render(message)
 
 	if m.showTimestamp {
 		timestampStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "238", Dark: "250"}).
 			Background(bgStyle.GetBackground())
-		timestampStr := timestampStyle.Render(fmt.Sprintf("%-*s", timestampColumnWidth, entry.Timestamp))
+		timestampContent := strings.Repeat(" ", timestampColumnWidth)
+		if !continuation {
+			timestampContent = fmt.Sprintf("%-*s", timestampColumnWidth, entry.Timestamp)
+		}
+		timestampStr := timestampStyle.Render(timestampContent)
 		return fmt.Sprintf("%s %s %s %s", timestampStr, tagStr, priorityStr, messageStr)
 	}
 
