@@ -155,10 +155,12 @@ func ParseLine(line string) (*Entry, error) {
 
 // FormatPlain returns a plain text representation without any styling or ANSI codes
 func (e *Entry) FormatPlain() string {
-	return fmt.Sprintf("%s %s %-20s %s",
+	tag := strings.TrimRight(e.Tag, " ")
+
+	return fmt.Sprintf("%s %s %s %s",
 		e.Timestamp,
 		e.Priority.String(),
-		truncate(e.Tag, 20),
+		tag,
 		e.Message,
 	)
 }
