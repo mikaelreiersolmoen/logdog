@@ -835,7 +835,7 @@ func (m Model) View() string {
 		selectionInfo := "SELECTION | j/k: extend | c: copy lines | C: copy messages | esc: cancel"
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear | v: select | l: log level | f: filter | z: toggle timestamp"
+		baseHelp := "q: quit | c: clear | click: highlight | v: select | l: log level | f: filter | z: toggle timestamp"
 		footer = footerStyle.Render(baseHelp)
 	}
 
