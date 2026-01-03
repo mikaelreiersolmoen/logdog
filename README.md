@@ -32,23 +32,23 @@ go build -o logdog .
 ## Usage
 
 ```bash
-# View all logs (last 1000 entries by default)
-./logdog
+# View logs for all applications
+logdog
 
-# View last 5000 entries
-./logdog --tail 5000
+# View logs for one application
+logdog --app com.example.app
 
-# Filter by application ID
-./logdog --app com.example.app
+# View logs with custom tail size (default is 1000)
+logdog --tail 5000
 
-# Filter by app with custom tail size
-./logdog --app com.example.app --tail 500
+# View no prior logs (only new entries)
+logdog --tail 0
 
-# Filter by app with no (unlimited) tail size
-./logdog --app com.example.app --tail 0
+# View _all_ logs
+logdog --tail all
 
 # Using shorthand flags
-./logdog -a com.example.app -t 2000
+logdog -a com.example.app -t 2000
 ```
 
 ### Prerequisites
@@ -70,7 +70,13 @@ Click on a log entry to highlight it and move the highlight with `up`/`down` or 
 
 ### Configuration
 
-Settings are stored in `~/.config/logdog/config.json`. In addition to persisting selected log level, filters and timestamp toggle, you can also configure preferred tag column width. 
+Settings are stored in `~/.config/logdog/config.json`:
+
+- Selected log level
+- Filters
+- Timestamp toggle
+- Line wrap toggle
+- Tag column width
 
 ## Built with
 
