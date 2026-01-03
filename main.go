@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mikaelreiersolmoen/logdog/internal/adb"
@@ -14,12 +16,18 @@ import (
 
 func main() {
 	var appID string
-	var tailSize int
+	var tailValue string
 	flag.StringVar(&appID, "app", "", "Application ID to filter logcat logs (optional)")
 	flag.StringVar(&appID, "a", "", "Application ID to filter logcat logs (shorthand)")
-	flag.IntVar(&tailSize, "tail", 1000, "Number of recent log entries to load initially (0 = all)")
-	flag.IntVar(&tailSize, "t", 1000, "Number of recent log entries to load initially (shorthand, 0 = all)")
+	flag.StringVar(&tailValue, "tail", "1000", "Number of recent log entries to load initially (0 = none, all = all)")
+	flag.StringVar(&tailValue, "t", "1000", "Number of recent log entries to load initially (shorthand, 0 = none, all = all)")
 	flag.Parse()
+
+	tailSize, err := parseTailSize(tailValue)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(2)
+	}
 
 	if err := config.EnsureExists(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to initialize preferences: %v\n", err)
@@ -70,4 +78,19 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func parseTailSize(value string) (int, error) {
+	if strings.EqualFold(value, "all") {
+		return logcat.TailAll, nil
+	}
+
+	tailSize, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --tail value %q (expected integer or \"all\")", value)
+	}
+	if tailSize < 0 {
+		return 0, fmt.Errorf("invalid --tail value %d (must be >= 0 or \"all\")", tailSize)
+	}
+	return tailSize, nil
 }

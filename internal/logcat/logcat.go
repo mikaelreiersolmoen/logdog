@@ -185,9 +185,12 @@ type Manager struct {
 	lineChan        chan<- string
 }
 
+// TailAll indicates that all available log entries should be loaded.
+const TailAll = -1
+
 // NewManager creates a new logcat manager
 func NewManager(appID string, tailSize int) *Manager {
-	if tailSize < 0 {
+	if tailSize < TailAll {
 		tailSize = 1000 // Default to 1000 entries
 	}
 	return &Manager{
@@ -214,6 +217,8 @@ func (m *Manager) Start() error {
 	args = append(args, "logcat", "-v", "threadtime")
 	if m.tailSize > 0 {
 		args = append(args, "-T", fmt.Sprintf("%d", m.tailSize))
+	} else if m.tailSize == 0 {
+		args = append(args, "-T", "0")
 	}
 	if m.appID != "" {
 		pid, err := m.getPID()
