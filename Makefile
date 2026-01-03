@@ -26,19 +26,25 @@ build-macos:
 	mkdir -p $(DIST_DIR)
 	GOOS=darwin GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-amd64 $(MAIN_PATH)
 	GOOS=darwin GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-arm64 $(MAIN_PATH)
-	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-macos-amd64 $(BINARY_NAME)-$(VERSION)-macos-arm64
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-amd64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-macos-amd64
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-arm64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-macos-arm64
+	rm -f $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-amd64 $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-arm64
 
 build-linux:
 	mkdir -p $(DIST_DIR)
 	GOOS=linux GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64 $(MAIN_PATH)
 	GOOS=linux GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-arm64 $(MAIN_PATH)
-	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-linux-amd64 $(BINARY_NAME)-$(VERSION)-linux-arm64
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-linux-amd64
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-linux-arm64
+	rm -f $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64 $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-arm64
 
 build-windows:
 	mkdir -p $(DIST_DIR)
 	GOOS=windows GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-amd64.exe $(MAIN_PATH)
 	GOOS=windows GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-arm64.exe $(MAIN_PATH)
-	cd $(DIST_DIR) && zip -q $(BINARY_NAME)-$(VERSION)-windows.zip $(BINARY_NAME)-$(VERSION)-windows-amd64.exe $(BINARY_NAME)-$(VERSION)-windows-arm64.exe
+	cd $(DIST_DIR) && zip -q $(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(BINARY_NAME)-$(VERSION)-windows-amd64.exe
+	cd $(DIST_DIR) && zip -q $(BINARY_NAME)-$(VERSION)-windows-arm64.zip $(BINARY_NAME)-$(VERSION)-windows-arm64.exe
+	rm -f $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-amd64.exe $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-arm64.exe
 
 build-all: build-macos build-linux build-windows
 
