@@ -39,24 +39,23 @@ make build
 
 ## Usage
 
+```text
+logdog [--app <application_id>] [--tail <count|all>]
+```
+
+Arguments:
+
+- `--app` / `-a` (`string`): Application ID to filter logs (optional). Omit to show log for all apps.
+- `--tail` / `-t` (`integer` or `all`): Number of recent log entries to load on startup. Use `0` for none, or `all` for everything. Defaults to the integer `tailSize` in the config file.
+
+Examples:
+
 ```bash
-# View logs for all applications
-logdog
+# Filter to one app and load 2000 previous entries
+logdog --app com.example.app --tail 2000
 
-# View logs for one application
-logdog --app com.example.app
-
-# View logs with custom tail size (default is 1000)
-logdog --tail 5000
-
-# View no prior logs (only new entries)
-logdog --tail 0
-
-# View _all_ logs
+# Load all previous entries for all apps
 logdog --tail all
-
-# Using shorthand flags
-logdog -a com.example.app -t 2000
 ```
 
 ### Prerequisites
@@ -82,6 +81,7 @@ Settings are stored in `~/.config/logdog/config.json`:
 
 - Selected log level
 - Filters
+- Default tail size
 - Timestamp toggle
 - Line wrap toggle
 - Tag column width

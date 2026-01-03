@@ -191,7 +191,7 @@ const TailAll = -1
 // NewManager creates a new logcat manager
 func NewManager(appID string, tailSize int) *Manager {
 	if tailSize < TailAll {
-		tailSize = 1000 // Default to 1000 entries
+		tailSize = 1000 // Fallback when an invalid tail size is provided.
 	}
 	return &Manager{
 		appID:           appID,

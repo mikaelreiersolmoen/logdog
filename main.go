@@ -17,10 +17,11 @@ import (
 func main() {
 	var appID string
 	var tailValue string
+	defaultTailValue := resolveDefaultTailValue()
 	flag.StringVar(&appID, "app", "", "Application ID to filter logcat logs (optional)")
 	flag.StringVar(&appID, "a", "", "Application ID to filter logcat logs (shorthand)")
-	flag.StringVar(&tailValue, "tail", "1000", "Number of recent log entries to load initially (0 = none, all = all)")
-	flag.StringVar(&tailValue, "t", "1000", "Number of recent log entries to load initially (shorthand, 0 = none, all = all)")
+	flag.StringVar(&tailValue, "tail", defaultTailValue, "Number of recent log entries to load initially (0 = none, all = all)")
+	flag.StringVar(&tailValue, "t", defaultTailValue, "Number of recent log entries to load initially (shorthand, 0 = none, all = all)")
 	flag.Parse()
 
 	tailSize, err := parseTailSize(tailValue)
@@ -93,4 +94,18 @@ func parseTailSize(value string) (int, error) {
 		return 0, fmt.Errorf("invalid --tail value %d (must be >= 0 or \"all\")", tailSize)
 	}
 	return tailSize, nil
+}
+
+func resolveDefaultTailValue() string {
+	defaultValue := config.DefaultTailSize
+	prefs, _, err := config.Load()
+	if err != nil {
+		return strconv.Itoa(defaultValue)
+	}
+
+	if prefs.TailSize < 0 {
+		return strconv.Itoa(defaultValue)
+	}
+
+	return strconv.Itoa(prefs.TailSize)
 }

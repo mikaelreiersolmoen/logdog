@@ -14,12 +14,16 @@ type FilterPreference struct {
 	Pattern string `json:"pattern"`
 }
 
+// DefaultTailSize is the fallback tail size when preferences are missing or invalid.
+const DefaultTailSize = 1000
+
 // Preferences holds persisted UI preferences.
 type Preferences struct {
 	Filters        []FilterPreference `json:"filters"`
 	MinLogLevel    string             `json:"minLogLevel"`
 	ShowTimestamp  bool               `json:"showTimestamp"`
 	TagColumnWidth int                `json:"tagColumnWidth"`
+	TailSize       int                `json:"tailSize"`
 	WrapLines      bool               `json:"wrapLines"`
 }
 
@@ -90,13 +94,19 @@ func EnsureExists() error {
 		return fmt.Errorf("stat config: %w", statErr)
 	}
 
-	defaults := Preferences{
+	defaults := DefaultPreferences()
+
+	return Save(defaults)
+}
+
+// DefaultPreferences returns the default config values.
+func DefaultPreferences() Preferences {
+	return Preferences{
 		Filters:       []FilterPreference{},
 		ShowTimestamp: true,
 		WrapLines:     false,
+		TailSize:      DefaultTailSize,
 	}
-
-	return Save(defaults)
 }
 
 func configFilePath() (string, error) {
