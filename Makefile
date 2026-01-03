@@ -24,9 +24,9 @@ build:
 
 build-macos:
 	mkdir -p $(DIST_DIR)
-	GOOS=darwin GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-darwin-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-darwin-arm64 $(MAIN_PATH)
-	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-darwin-amd64 $(BINARY_NAME)-$(VERSION)-darwin-arm64
+	GOOS=darwin GOARCH=amd64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-amd64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=arm64 go build -o $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos-arm64 $(MAIN_PATH)
+	tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-macos.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-$(VERSION)-macos-amd64 $(BINARY_NAME)-$(VERSION)-macos-arm64
 
 build-linux:
 	mkdir -p $(DIST_DIR)
