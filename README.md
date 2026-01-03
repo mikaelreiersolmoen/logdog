@@ -1,6 +1,6 @@
 # Logdog
 
-A text-based interface for viewing and filtering Android logcat.
+A text-based interface for viewing and filtering Android logcat stream.
 
 ![logdog screenshot](screenshot.png)
 
@@ -17,16 +17,18 @@ A text-based interface for viewing and filtering Android logcat.
 
 ## Installation
 
+### Install with Go
+
 ```bash
 go install github.com/mikaelreiersolmoen/logdog@latest
 ```
 
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/mikaelreiersolmoen/logdog.git
 cd logdog
-go build -o logdog .
+make build
 ```
 
 ## Usage
