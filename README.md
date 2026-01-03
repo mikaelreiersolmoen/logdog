@@ -17,6 +17,12 @@ A text-based interface for viewing and filtering Android logcat stream.
 
 ## Installation
 
+### Homebrew (macOS)
+
+```bash
+brew install mikaelreiersolmoen/homebrew-tap/logdog
+```
+
 ### Install with Go
 
 ```bash
