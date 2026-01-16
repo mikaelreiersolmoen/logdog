@@ -271,7 +271,7 @@ func NewModel(appID string, tailSize int) Model {
 			selectedDevice:   devices[0].Model,
 			showClearConfirm: false,
 			clearInput:       clearInput,
-			showTimestamp:    true,
+			showTimestamp:    false,
 			wrapLines:        false,
 		}
 		if prefsLoaded {
@@ -303,7 +303,7 @@ func NewModel(appID string, tailSize int) Model {
 		selectedDevice:   "",
 		showClearConfirm: false,
 		clearInput:       clearInput,
-		showTimestamp:    true,
+		showTimestamp:    false,
 		wrapLines:        false,
 	}
 

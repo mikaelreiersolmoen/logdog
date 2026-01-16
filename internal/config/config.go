@@ -103,7 +103,7 @@ func EnsureExists() error {
 func DefaultPreferences() Preferences {
 	return Preferences{
 		Filters:       []FilterPreference{},
-		ShowTimestamp: true,
+		ShowTimestamp: false,
 		WrapLines:     false,
 		TailSize:      DefaultTailSize,
 	}
