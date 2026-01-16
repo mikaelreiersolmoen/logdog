@@ -3,6 +3,7 @@ package adb
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -48,7 +49,7 @@ func GetPID(deviceSerial, appID string) (string, error) {
 	}
 	args = append(args, "shell", "pidof", appID)
 	cmd := exec.Command("adb", args...)
-	output, err = cmd.Output()
+	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", appID)
 	}
