@@ -334,6 +334,7 @@ func (m *Manager) monitorPID() {
 			// App has restarted with new PID
 			m.currentPID = newPID
 			if err := m.restart(); err != nil {
+				m.statusChan <- "error"
 				return
 			}
 			m.statusChan <- "running"

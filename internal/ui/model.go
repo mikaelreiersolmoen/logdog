@@ -797,6 +797,9 @@ func (m Model) View() string {
 	case "reconnecting":
 		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
 		statusText = "disconnected"
+	case "error":
+		statusStyle = statusStyle.Foreground(GetErrorColor())
+		statusText = "error"
 	}
 
 	// Get color for current log level
