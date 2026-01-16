@@ -114,6 +114,12 @@ func ParseLine(line string) (*Entry, error) {
 		entry.Message = line
 		return entry, nil
 	}
+	if !isNumeric(parts[2]) || !isNumeric(parts[3]) || len(parts[4]) != 1 {
+		// Not threadtime format, return as-is with Unknown priority
+		entry.Priority = Unknown
+		entry.Message = line
+		return entry, nil
+	}
 
 	// Parse timestamp (MM-DD HH:MM:SS.mmm)
 	if len(parts) >= 2 {
@@ -159,6 +165,18 @@ func ParseLine(line string) (*Entry, error) {
 	}
 
 	return entry, nil
+}
+
+func isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // FormatPlain returns a plain text representation without any styling or ANSI codes
