@@ -3,22 +3,42 @@ package adb
 import (
 	"fmt"
 	"os/exec"
-	"strings"
 	"time"
 )
 
 // GetPID gets the PID for an app package name on the specified device
 func GetPID(deviceSerial, appID string) (string, error) {
-	// First check if device is connected
-	cmd := exec.Command("adb", "devices")
-	output, err := cmd.Output()
+	devices, err := GetDevices()
 	if err != nil {
-		return "", fmt.Errorf("adb command failed - is Android SDK installed?")
+		return "", err
 	}
-
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) <= 1 {
-		return "", fmt.Errorf("no devices/emulators found - connect a device or start an emulator")
+	if deviceSerial != "" {
+		var target *Device
+		for i := range devices {
+			if devices[i].Serial == deviceSerial {
+				target = &devices[i]
+				break
+			}
+		}
+		if target == nil {
+			return "", fmt.Errorf("device %s not found", deviceSerial)
+		}
+		if target.Status != "device" {
+			return "", fmt.Errorf("device %s not online (status: %s)", target.Serial, target.Status)
+		}
+	} else {
+		onlineCount := 0
+		for _, device := range devices {
+			if device.Status == "device" {
+				onlineCount++
+			}
+		}
+		if onlineCount == 0 {
+			return "", fmt.Errorf("no online devices found - connect a device or start an emulator")
+		}
+		if onlineCount > 1 {
+			return "", fmt.Errorf("multiple devices connected - select a device")
+		}
 	}
 
 	// Get PID
@@ -27,7 +47,7 @@ func GetPID(deviceSerial, appID string) (string, error) {
 		args = append(args, "-s", deviceSerial)
 	}
 	args = append(args, "shell", "pidof", appID)
-	cmd = exec.Command("adb", args...)
+	cmd := exec.Command("adb", args...)
 	output, err = cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("app not running or package name not found - is '%s' installed and running?", appID)
