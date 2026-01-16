@@ -809,7 +809,7 @@ func (m Model) View() string {
 		statusText = "running"
 	case "stopped":
 		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
-		statusText = "disconnected"
+		statusText = "stopped"
 	case "reconnecting":
 		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
 		statusText = "disconnected"
