@@ -111,13 +111,13 @@ func ParseLine(line string) (*Entry, error) {
 	if len(parts) < 6 {
 		// Malformed line, return as-is with Unknown priority
 		entry.Priority = Unknown
-		entry.Message = line
+		entry.Message = stripSoftHyphen(line)
 		return entry, nil
 	}
 	if !isNumeric(parts[2]) || !isNumeric(parts[3]) || len(parts[4]) != 1 {
 		// Not threadtime format, return as-is with Unknown priority
 		entry.Priority = Unknown
-		entry.Message = line
+		entry.Message = stripSoftHyphen(line)
 		return entry, nil
 	}
 
@@ -151,16 +151,16 @@ func ParseLine(line string) (*Entry, error) {
 		colonIdx := strings.Index(trimmedRemainder, ":")
 		if colonIdx >= 0 {
 			tag := strings.TrimSpace(trimmedRemainder[:colonIdx])
-			entry.Tag = tag
+			entry.Tag = stripSoftHyphen(tag)
 			if colonIdx+1 < len(trimmedRemainder) {
 				message := trimmedRemainder[colonIdx+1:]
 				if len(message) > 0 && message[0] == ' ' {
 					message = message[1:]
 				}
-				entry.Message = message
+				entry.Message = stripSoftHyphen(message)
 			}
 		} else {
-			entry.Message = strings.TrimLeft(remainder, " ")
+			entry.Message = stripSoftHyphen(strings.TrimLeft(remainder, " "))
 		}
 	}
 
@@ -177,6 +177,18 @@ func isNumeric(s string) bool {
 		}
 	}
 	return true
+}
+
+func stripSoftHyphen(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if r == '\u00ad' {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // FormatPlain returns a plain text representation without any styling or ANSI codes
