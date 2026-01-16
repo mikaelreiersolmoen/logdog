@@ -1728,8 +1728,8 @@ func (m Model) PersistPreferences() error {
 		WrapLines:      m.wrapLines,
 	}
 
-	existingPrefs, _, prefsErr := config.Load()
-	if prefsErr == nil {
+	existingPrefs, exists, prefsErr := config.Load()
+	if prefsErr == nil && exists {
 		prefs.TailSize = existingPrefs.TailSize
 	} else {
 		prefs.TailSize = config.DefaultTailSize

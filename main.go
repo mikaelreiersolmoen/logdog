@@ -98,8 +98,8 @@ func parseTailSize(value string) (int, error) {
 
 func resolveDefaultTailValue() string {
 	defaultValue := config.DefaultTailSize
-	prefs, _, err := config.Load()
-	if err != nil {
+	prefs, exists, err := config.Load()
+	if err != nil || !exists {
 		return strconv.Itoa(defaultValue)
 	}
 

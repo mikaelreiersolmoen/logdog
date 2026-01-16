@@ -3,8 +3,10 @@ package logcat
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mikaelreiersolmoen/logdog/internal/adb"
@@ -174,7 +176,6 @@ func (e *Entry) FormatPlain() string {
 // Manager manages the logcat process
 type Manager struct {
 	cmd             *exec.Cmd
-	scanner         *bufio.Scanner
 	appID           string
 	deviceSerial    string
 	stopChan        chan struct{}
@@ -183,10 +184,22 @@ type Manager struct {
 	currentPID      string
 	statusChan      chan string
 	lineChan        chan<- string
+	scanner         *bufio.Scanner
+	readStop        chan struct{}
+	readDone        chan struct{}
+	readMu          sync.Mutex
+	cmdMu           sync.Mutex
 }
 
 // TailAll indicates that all available log entries should be loaded.
 const TailAll = -1
+
+const (
+	scannerBufferSize    = 64 * 1024
+	maxScannerBufferSize = 1024 * 1024
+	readBatchSize        = 100
+	readTickInterval     = 33 * time.Millisecond
+)
 
 // NewManager creates a new logcat manager
 func NewManager(appID string, tailSize int) *Manager {
@@ -232,17 +245,23 @@ func (m *Manager) Start() error {
 		}
 	}
 
-	m.cmd = exec.Command("adb", args...)
-	stdout, err := m.cmd.StdoutPipe()
+	cmd := exec.Command("adb", args...)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
-	if err := m.cmd.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start logcat: %w", err)
 	}
 
-	m.scanner = bufio.NewScanner(stdout)
+	scanner := newScanner(stdout)
+
+	m.cmdMu.Lock()
+	m.cmd = cmd
+	m.cmdMu.Unlock()
+
+	m.setScanner(scanner)
 
 	// Start PID monitoring if filtering by app
 	if m.appID != "" && m.currentPID != "" {
@@ -294,9 +313,7 @@ func (m *Manager) monitorPID() {
 // restart stops the current logcat process and starts a new one with the current PID
 func (m *Manager) restart() error {
 	// Stop the current process
-	if m.cmd != nil && m.cmd.Process != nil {
-		m.cmd.Process.Kill()
-	}
+	m.stopProcess()
 
 	// Build new logcat command with updated PID
 	args := []string{}
@@ -308,22 +325,23 @@ func (m *Manager) restart() error {
 		args = append(args, "--pid="+m.currentPID)
 	}
 
-	m.cmd = exec.Command("adb", args...)
-	stdout, err := m.cmd.StdoutPipe()
+	cmd := exec.Command("adb", args...)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
-	if err := m.cmd.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start logcat: %w", err)
 	}
 
-	m.scanner = bufio.NewScanner(stdout)
+	scanner := newScanner(stdout)
 
-	// Restart the ReadLines goroutine with the new scanner
-	if m.lineChan != nil {
-		go m.readLinesInternal()
-	}
+	m.cmdMu.Lock()
+	m.cmd = cmd
+	m.cmdMu.Unlock()
+
+	m.setScanner(scanner)
 
 	return nil
 }
@@ -336,52 +354,94 @@ func (m *Manager) StatusChan() <-chan string {
 // ReadLines reads lines from logcat and sends them on the channel
 // Returns when Stop() is called or logcat process ends
 func (m *Manager) ReadLines(lineChan chan<- string) {
+	m.readMu.Lock()
 	m.lineChan = lineChan
-	m.readLinesInternal()
+	scanner := m.scanner
+	m.readMu.Unlock()
+
+	if scanner == nil {
+		return
+	}
+
+	if done := m.startReader(scanner); done != nil {
+		<-done
+	}
 }
 
-// readLinesInternal is the internal implementation of ReadLines
-func (m *Manager) readLinesInternal() {
+// readLinesInternal is the internal implementation of ReadLines.
+func (m *Manager) readLinesInternal(scanner *bufio.Scanner, lineChan chan<- string, readStop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
+
+	rawLines := make(chan string, readBatchSize*2)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(rawLines)
+		defer func() {
+			select {
+			case errChan <- scanner.Err():
+			default:
+			}
+		}()
+		for scanner.Scan() {
+			line := scanner.Text()
+			select {
+			case rawLines <- line:
+			case <-readStop:
+				return
+			case <-m.stopChan:
+				return
+			}
+		}
+	}()
+
 	// Use a buffer to batch lines
-	batch := make([]string, 0, 100)
-	ticker := time.NewTicker(33 * time.Millisecond) // ~30 FPS
+	batch := make([]string, 0, readBatchSize)
+	ticker := time.NewTicker(readTickInterval) // ~30 FPS
 	defer ticker.Stop()
+
+	flush := func() bool {
+		if len(batch) == 0 {
+			return true
+		}
+		for _, line := range batch {
+			select {
+			case lineChan <- line:
+			case <-readStop:
+				return false
+			case <-m.stopChan:
+				return false
+			}
+		}
+		batch = batch[:0]
+		return true
+	}
 
 	for {
 		select {
 		case <-m.stopChan:
-			// Send any remaining lines
-			if len(batch) > 0 {
-				for _, line := range batch {
-					m.lineChan <- line
-				}
-			}
+			_ = flush()
 			return
-		case <-ticker.C:
-			// Flush batch periodically
-			if len(batch) > 0 {
-				for _, line := range batch {
-					m.lineChan <- line
+		case <-readStop:
+			_ = flush()
+			return
+		case line, ok := <-rawLines:
+			if !ok {
+				_ = flush()
+				select {
+				case <-errChan:
+				default:
 				}
-				batch = batch[:0]
+				return
 			}
-		default:
-			// Try to read a line (non-blocking via select)
-			if m.scanner.Scan() {
-				batch = append(batch, m.scanner.Text())
-				// If batch is full, send immediately
-				if len(batch) >= 100 {
-					for _, line := range batch {
-						m.lineChan <- line
-					}
-					batch = batch[:0]
-				}
-			} else {
-				// Scanner done or error
-				if err := m.scanner.Err(); err != nil {
-					// Could send error on a separate channel
+			batch = append(batch, line)
+			if len(batch) >= readBatchSize {
+				if !flush() {
 					return
 				}
+			}
+		case <-ticker.C:
+			if !flush() {
 				return
 			}
 		}
@@ -390,10 +450,75 @@ func (m *Manager) readLinesInternal() {
 
 // Stop stops the logcat process and monitoring
 func (m *Manager) Stop() error {
+	m.readMu.Lock()
+	if m.readStop != nil {
+		close(m.readStop)
+		m.readStop = nil
+	}
+	m.readMu.Unlock()
+
 	close(m.stopChan)
 	close(m.monitorStopChan)
-	if m.cmd != nil && m.cmd.Process != nil {
-		return m.cmd.Process.Kill()
+	return m.stopProcess()
+}
+
+func newScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, 0, scannerBufferSize)
+	scanner.Buffer(buf, maxScannerBufferSize)
+	return scanner
+}
+
+func (m *Manager) setScanner(scanner *bufio.Scanner) {
+	m.readMu.Lock()
+	m.scanner = scanner
+	m.readMu.Unlock()
+
+	if scanner == nil {
+		return
 	}
-	return nil
+	_ = m.startReader(scanner)
+}
+
+func (m *Manager) startReader(scanner *bufio.Scanner) <-chan struct{} {
+	if scanner == nil {
+		return nil
+	}
+
+	m.readMu.Lock()
+	if m.lineChan == nil {
+		m.readMu.Unlock()
+		return nil
+	}
+	oldStop := m.readStop
+	oldDone := m.readDone
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	lineChan := m.lineChan
+	m.readStop = stop
+	m.readDone = done
+	m.readMu.Unlock()
+
+	if oldStop != nil {
+		close(oldStop)
+		if oldDone != nil {
+			<-oldDone
+		}
+	}
+
+	go m.readLinesInternal(scanner, lineChan, stop, done)
+	return done
+}
+
+func (m *Manager) stopProcess() error {
+	m.cmdMu.Lock()
+	cmd := m.cmd
+	m.cmdMu.Unlock()
+
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+
+	_ = cmd.Process.Kill()
+	return cmd.Wait()
 }
