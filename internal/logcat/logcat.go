@@ -222,6 +222,37 @@ func (m *Manager) SetDevice(serial string) {
 
 // Start starts the logcat process
 func (m *Manager) Start() error {
+	devices, err := adb.GetDevices()
+	if err != nil {
+		return err
+	}
+	if m.deviceSerial != "" {
+		var target *adb.Device
+		for i := range devices {
+			if devices[i].Serial == m.deviceSerial {
+				target = &devices[i]
+				break
+			}
+		}
+		if target == nil {
+			return fmt.Errorf("device %s not found", m.deviceSerial)
+		}
+		if target.Status != "device" {
+			return fmt.Errorf("device %s not online (status: %s)", target.Serial, target.Status)
+		}
+	} else {
+		hasOnline := false
+		for _, device := range devices {
+			if device.Status == "device" {
+				hasOnline = true
+				break
+			}
+		}
+		if !hasOnline {
+			return fmt.Errorf("no online devices found")
+		}
+	}
+
 	// Build logcat command with app ID filter
 	args := []string{}
 	if m.deviceSerial != "" {
