@@ -435,17 +435,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Calculate header height based on what will be shown
-		headerHeight := 4 // Base header (log level line + app/device line + border)
-		footerHeight := 2
+		headerHeight, footerHeight := m.layoutHeights()
 		verticalMargin := headerHeight + footerHeight
+		viewportHeight := msg.Height - verticalMargin
+		if viewportHeight < 0 {
+			viewportHeight = 0
+		}
 
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMargin)
-			m.viewport.YPosition = headerHeight
+			m.viewport = viewport.New(msg.Width, viewportHeight)
+			m.viewport.YPosition = 0
 			m.ready = true
 		} else {
 			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMargin
+			m.viewport.Height = viewportHeight
+			m.viewport.YPosition = 0
 		}
 
 		m.width = msg.Width
@@ -730,6 +734,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m Model) layoutHeights() (int, int) {
+	headerHeight := 3
+	if !m.showFilter && !m.showClearConfirm {
+		headerHeight = 4
+	}
+	footerHeight := 2
+	if m.showFilter || m.showClearConfirm {
+		footerHeight = 3
+	}
+	return headerHeight, footerHeight
 }
 
 func (m Model) View() string {
