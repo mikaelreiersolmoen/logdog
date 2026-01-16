@@ -973,7 +973,7 @@ func (m *Model) rebuildViewport(scrollToBottom bool) {
 
 	for _, entry := range m.parsedEntries {
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp
+			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp && entry.Tag == lastTag
 			showTag := false
 
 			if !continuation {
@@ -1042,7 +1042,7 @@ func (m *Model) appendViewport(scrollToBottom bool) {
 	for i := m.renderedUpTo; i < len(m.parsedEntries); i++ {
 		entry := m.parsedEntries[i]
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp
+			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp && entry.Tag == lastTag
 			showTag := false
 
 			if !continuation {
