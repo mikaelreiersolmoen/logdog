@@ -212,20 +212,21 @@ func (e *Entry) FormatPlain() string {
 
 // Manager manages the logcat process
 type Manager struct {
-	cmd             *exec.Cmd
-	appID           string
-	deviceSerial    string
-	stopChan        chan struct{}
-	monitorStopChan chan struct{}
-	tailSize        int
-	currentPID      string
-	statusChan      chan string
-	lineChan        chan<- string
-	scanner         *bufio.Scanner
-	readStop        chan struct{}
-	readDone        chan struct{}
-	readMu          sync.Mutex
-	cmdMu           sync.Mutex
+	cmd              *exec.Cmd
+	appID            string
+	deviceSerial     string
+	stopChan         chan struct{}
+	monitorStopChan  chan struct{}
+	tailSize         int
+	currentPID       string
+	statusChan       chan string
+	deviceStatusChan chan string
+	lineChan         chan<- string
+	scanner          *bufio.Scanner
+	readStop         chan struct{}
+	readDone         chan struct{}
+	readMu           sync.Mutex
+	cmdMu            sync.Mutex
 }
 
 // TailAll indicates that all available log entries should be loaded.
@@ -244,11 +245,12 @@ func NewManager(appID string, tailSize int) *Manager {
 		tailSize = 1000 // Fallback when an invalid tail size is provided.
 	}
 	return &Manager{
-		appID:           appID,
-		stopChan:        make(chan struct{}),
-		monitorStopChan: make(chan struct{}),
-		tailSize:        tailSize,
-		statusChan:      make(chan string, 10),
+		appID:            appID,
+		stopChan:         make(chan struct{}),
+		monitorStopChan:  make(chan struct{}),
+		tailSize:         tailSize,
+		statusChan:       make(chan string, 10),
+		deviceStatusChan: make(chan string, 10),
 	}
 }
 
@@ -335,6 +337,10 @@ func (m *Manager) Start() error {
 	if m.appID != "" && m.currentPID != "" {
 		go m.monitorPID()
 	}
+	if m.deviceSerial != "" {
+		m.sendDeviceStatus("connected")
+		go m.monitorDevice()
+	}
 
 	return nil
 }
@@ -418,6 +424,62 @@ func (m *Manager) restart() error {
 // StatusChan returns the channel for receiving status updates
 func (m *Manager) StatusChan() <-chan string {
 	return m.statusChan
+}
+
+// DeviceStatusChan returns the channel for receiving device connection updates.
+func (m *Manager) DeviceStatusChan() <-chan string {
+	return m.deviceStatusChan
+}
+
+func (m *Manager) sendDeviceStatus(status string) {
+	select {
+	case m.deviceStatusChan <- status:
+	default:
+	}
+}
+
+func (m *Manager) monitorDevice() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	lastStatus := ""
+
+	for {
+		select {
+		case <-m.stopChan:
+			return
+		default:
+		}
+
+		status := "disconnected"
+		devices, err := adb.GetDevices()
+		if err == nil {
+			for _, device := range devices {
+				if device.Serial == m.deviceSerial {
+					if device.Status == "device" {
+						status = "connected"
+					}
+					break
+				}
+			}
+		}
+
+		if status != lastStatus {
+			m.sendDeviceStatus(status)
+			if status == "disconnected" {
+				_ = m.stopProcess()
+			} else if status == "connected" && lastStatus == "disconnected" && m.appID == "" {
+				_ = m.restart()
+			}
+			lastStatus = status
+		}
+
+		select {
+		case <-m.stopChan:
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // ReadLines reads lines from logcat and sends them on the channel

@@ -127,6 +127,7 @@ type Model struct {
 	height           int
 	appID            string
 	appStatus        string
+	deviceStatus     string
 	terminating      bool
 	showLogLevel     bool
 	logLevelList     list.Model
@@ -177,6 +178,7 @@ type logLineMsg struct {
 }
 type updateViewportMsg struct{}
 type appStatusMsg string
+type deviceStatusMsg string
 
 type entryLineRange struct {
 	start int
@@ -269,6 +271,7 @@ func NewModel(appID string, tailSize int) Model {
 			deviceList:       list.Model{},
 			devices:          devices,
 			selectedDevice:   devices[0].Model,
+			deviceStatus:     "connected",
 			showClearConfirm: false,
 			clearInput:       clearInput,
 			showTimestamp:    false,
@@ -424,6 +427,9 @@ func (m Model) Init() tea.Cmd {
 	if m.appID != "" {
 		cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
 	}
+	if m.selectedDevice != "" {
+		cmds = append(cmds, waitForDeviceStatus(m.logManager.DeviceStatusChan()))
+	}
 
 	return tea.Batch(cmds...)
 }
@@ -483,6 +489,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.terminating {
 			cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
 		}
+	case deviceStatusMsg:
+		m.deviceStatus = string(msg)
+		if !m.terminating {
+			cmds = append(cmds, waitForDeviceStatus(m.logManager.DeviceStatusChan()))
+		}
 
 	case updateViewportMsg:
 		m.renderScheduled = false
@@ -512,6 +523,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					device := adb.Device(i)
 					m.logManager.SetDevice(device.Serial)
 					m.selectedDevice = device.Model
+					m.deviceStatus = "connected"
 					m.showDeviceSelect = false
 					// Start logcat now that device is selected
 					cmds := []tea.Cmd{
@@ -520,6 +532,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					if m.appID != "" {
 						cmds = append(cmds, waitForStatus(m.logManager.StatusChan()))
+					}
+					if m.selectedDevice != "" {
+						cmds = append(cmds, waitForDeviceStatus(m.logManager.DeviceStatusChan()))
 					}
 					return m, tea.Batch(cmds...)
 				}
@@ -818,6 +833,13 @@ func (m Model) View() string {
 		statusText = "error"
 	}
 
+	deviceStatusStyle := lipgloss.NewStyle()
+	var deviceStatusText string
+	if m.deviceStatus == "disconnected" {
+		deviceStatusStyle = deviceStatusStyle.Foreground(GetWarnColor())
+		deviceStatusText = "disconnected"
+	}
+
 	// Get color for current log level
 	var logLevelColor lipgloss.TerminalColor
 	switch m.minLogLevel {
@@ -858,7 +880,11 @@ func (m Model) View() string {
 			infoParts = append(infoParts, "app: all")
 		}
 		if m.selectedDevice != "" {
-			infoParts = append(infoParts, fmt.Sprintf("device: %s", deviceStyle.Render(m.selectedDevice)))
+			deviceInfo := fmt.Sprintf("device: %s", deviceStyle.Render(m.selectedDevice))
+			if deviceStatusText != "" {
+				deviceInfo = fmt.Sprintf("device: %s (%s)", deviceStyle.Render(m.selectedDevice), deviceStatusStyle.Render(deviceStatusText))
+			}
+			infoParts = append(infoParts, deviceInfo)
 		}
 		infoLine := strings.Join(infoParts, " | ")
 		headerLines = append(headerLines, headerStyleNoBorder.Render(infoLine))
@@ -1337,6 +1363,16 @@ func waitForStatus(statusChan <-chan string) tea.Cmd {
 			return nil
 		}
 		return appStatusMsg(status)
+	}
+}
+
+func waitForDeviceStatus(statusChan <-chan string) tea.Cmd {
+	return func() tea.Msg {
+		status, ok := <-statusChan
+		if !ok {
+			return nil
+		}
+		return deviceStatusMsg(status)
 	}
 }
 
