@@ -26,12 +26,9 @@ var tagColors = []lipgloss.AdaptiveColor{
 	{Light: "30", Dark: "123"},  // Pastel teal
 	{Light: "91", Dark: "183"},  // Pastel purple
 	{Light: "130", Dark: "222"}, // Pastel peach
-	{Light: "64", Dark: "151"},  // Pastel lime
 	{Light: "97", Dark: "189"},  // Pastel lavender
-	{Light: "37", Dark: "122"},  // Pastel cyan
 	{Light: "90", Dark: "182"},  // Pastel violet
 	{Light: "131", Dark: "217"}, // Pastel tan
-	{Light: "65", Dark: "152"},  // Pastel mint
 	{Light: "98", Dark: "193"},  // Pastel mauve
 }
 
