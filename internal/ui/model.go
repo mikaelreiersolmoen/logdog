@@ -150,6 +150,11 @@ type Model struct {
 	lastRenderedTag  string
 	lastRenderedTime string
 	lastRenderedCont bool
+	lastRenderedPrio logcat.Priority
+	lastRenderedPID  string
+	lastRenderedTID  string
+	lastRenderedPrev *logcat.Entry
+	lastRenderedLast *logcat.Entry
 	renderScheduled  bool
 	wrapLines        bool
 	autoScroll       bool
@@ -377,6 +382,11 @@ func (m *Model) resetRenderCache() {
 	m.lastRenderedTag = ""
 	m.lastRenderedTime = ""
 	m.lastRenderedCont = false
+	m.lastRenderedPrio = logcat.Unknown
+	m.lastRenderedPID = ""
+	m.lastRenderedTID = ""
+	m.lastRenderedPrev = nil
+	m.lastRenderedLast = nil
 	m.renderReset = true
 }
 
@@ -410,6 +420,53 @@ func formatFilterPreference(pref config.FilterPreference) string {
 		return "tag:" + pattern
 	}
 	return pattern
+}
+
+func isStackTraceLine(message string) bool {
+	trimmed := strings.TrimLeft(message, " \t")
+	if trimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(trimmed, "at ") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "Caused by:") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "Suppressed:") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "...") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "Stack trace:") {
+		return true
+	}
+	return false
+}
+
+func sameEntryMeta(a, b *logcat.Entry) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Timestamp == b.Timestamp &&
+		a.Tag == b.Tag &&
+		a.Priority == b.Priority &&
+		a.PID == b.PID &&
+		a.TID == b.TID
+}
+
+func shouldContinue(prev, curr, next *logcat.Entry) bool {
+	if !sameEntryMeta(prev, curr) {
+		return false
+	}
+	if isStackTraceLine(curr.Message) {
+		return true
+	}
+	if sameEntryMeta(curr, next) && isStackTraceLine(next.Message) {
+		return true
+	}
+	return false
 }
 
 func (m Model) Init() tea.Cmd {
@@ -991,47 +1048,70 @@ func (m *Model) rebuildViewport(scrollToBottom bool) {
 	if m.wrapLines {
 		maxWidth = m.viewport.Width
 	}
+	visible := make([]*logcat.Entry, 0, len(m.parsedEntries))
+	for _, entry := range m.parsedEntries {
+		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
+			visible = append(visible, entry)
+		}
+	}
+
 	var lastTag string
 	var lastTimestamp string
 	var lastWasContinuation bool
+	var lastPriority = logcat.Unknown
+	var lastPID string
+	var lastTID string
+	var lastPrevEntry *logcat.Entry
+	var lastEntry *logcat.Entry
 
 	selectedStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "251", Dark: "240"})
 	highlightStyle := lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "237"})
 
-	for _, entry := range m.parsedEntries {
-		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp && entry.Tag == lastTag
-			showTag := false
-
-			if !continuation {
-				if lastWasContinuation {
-					showTag = true
-				} else {
-					showTag = entry.Tag != lastTag
-				}
-			}
-
-			var entryLines []string
-			if m.selectedEntries[entry] {
-				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
-			} else if entry == m.highlightedEntry {
-				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
-			} else {
-				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
-			}
-
-			startLine := len(lineEntries)
-			lines = append(lines, entryLines...)
-			for range entryLines {
-				lineEntries = append(lineEntries, entry)
-			}
-			if len(entryLines) > 0 {
-				entryLineRanges[entry] = entryLineRange{start: startLine, end: len(lineEntries) - 1}
-			}
-			lastTag = entry.Tag
-			lastTimestamp = entry.Timestamp
-			lastWasContinuation = continuation
+	for i, entry := range visible {
+		var prev *logcat.Entry
+		if i > 0 {
+			prev = visible[i-1]
 		}
+		var next *logcat.Entry
+		if i+1 < len(visible) {
+			next = visible[i+1]
+		}
+		continuation := shouldContinue(prev, entry, next)
+		showTag := false
+
+		if !continuation {
+			if lastWasContinuation {
+				showTag = true
+			} else {
+				showTag = entry.Tag != lastTag
+			}
+		}
+
+		var entryLines []string
+		if m.selectedEntries[entry] {
+			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
+		} else if entry == m.highlightedEntry {
+			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
+		} else {
+			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
+		}
+
+		startLine := len(lineEntries)
+		lines = append(lines, entryLines...)
+		for range entryLines {
+			lineEntries = append(lineEntries, entry)
+		}
+		if len(entryLines) > 0 {
+			entryLineRanges[entry] = entryLineRange{start: startLine, end: len(lineEntries) - 1}
+		}
+		lastPrevEntry = lastEntry
+		lastEntry = entry
+		lastTag = entry.Tag
+		lastTimestamp = entry.Timestamp
+		lastWasContinuation = continuation
+		lastPriority = entry.Priority
+		lastPID = entry.PID
+		lastTID = entry.TID
 	}
 
 	m.renderedLines = lines
@@ -1040,6 +1120,11 @@ func (m *Model) rebuildViewport(scrollToBottom bool) {
 	m.lastRenderedTag = lastTag
 	m.lastRenderedTime = lastTimestamp
 	m.lastRenderedCont = lastWasContinuation
+	m.lastRenderedPrio = lastPriority
+	m.lastRenderedPID = lastPID
+	m.lastRenderedTID = lastTID
+	m.lastRenderedPrev = lastPrevEntry
+	m.lastRenderedLast = lastEntry
 	m.renderedUpTo = len(m.parsedEntries)
 	m.viewportContent = joinLines(lines)
 	m.viewport.SetContent(m.viewportContent)
@@ -1065,49 +1150,86 @@ func (m *Model) appendViewport(scrollToBottom bool) {
 	lastTag := m.lastRenderedTag
 	lastTimestamp := m.lastRenderedTime
 	lastWasContinuation := m.lastRenderedCont
+	lastPriority := m.lastRenderedPrio
+	lastPID := m.lastRenderedPID
+	lastTID := m.lastRenderedTID
+	lastPrevEntry := m.lastRenderedPrev
+	lastEntry := m.lastRenderedLast
 
+	pendingVisible := make([]*logcat.Entry, 0)
 	for i := m.renderedUpTo; i < len(m.parsedEntries); i++ {
 		entry := m.parsedEntries[i]
 		if entry.Priority >= m.minLogLevel && m.matchesFilters(entry) {
-			continuation := lastTimestamp != "" && entry.Timestamp == lastTimestamp && entry.Tag == lastTag
-			showTag := false
-
-			if !continuation {
-				if lastWasContinuation {
-					showTag = true
-				} else {
-					showTag = entry.Tag != lastTag
-				}
-			}
-
-			var entryLines []string
-			if m.selectedEntries[entry] {
-				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
-			} else if entry == m.highlightedEntry {
-				entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
-			} else {
-				entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
-			}
-
-			startLine := len(m.lineEntries)
-			newLines = append(newLines, entryLines...)
-			m.renderedLines = append(m.renderedLines, entryLines...)
-			for range entryLines {
-				m.lineEntries = append(m.lineEntries, entry)
-			}
-			if len(entryLines) > 0 {
-				m.entryLineRanges[entry] = entryLineRange{start: startLine, end: len(m.lineEntries) - 1}
-			}
-
-			lastTag = entry.Tag
-			lastTimestamp = entry.Timestamp
-			lastWasContinuation = continuation
+			pendingVisible = append(pendingVisible, entry)
 		}
+	}
+
+	if len(pendingVisible) > 0 && m.lastRenderedLast != nil {
+		if shouldContinue(m.lastRenderedPrev, m.lastRenderedLast, pendingVisible[0]) {
+			m.rebuildViewport(scrollToBottom)
+			return
+		}
+	}
+
+	for i, entry := range pendingVisible {
+		var prev *logcat.Entry
+		if i == 0 {
+			prev = lastEntry
+		} else {
+			prev = pendingVisible[i-1]
+		}
+		var next *logcat.Entry
+		if i+1 < len(pendingVisible) {
+			next = pendingVisible[i+1]
+		}
+		continuation := shouldContinue(prev, entry, next)
+		showTag := false
+
+		if !continuation {
+			if lastWasContinuation {
+				showTag = true
+			} else {
+				showTag = entry.Tag != lastTag
+			}
+		}
+
+		var entryLines []string
+		if m.selectedEntries[entry] {
+			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, selectedStyle, continuation, maxWidth)
+		} else if entry == m.highlightedEntry {
+			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
+		} else {
+			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
+		}
+
+		startLine := len(m.lineEntries)
+		newLines = append(newLines, entryLines...)
+		m.renderedLines = append(m.renderedLines, entryLines...)
+		for range entryLines {
+			m.lineEntries = append(m.lineEntries, entry)
+		}
+		if len(entryLines) > 0 {
+			m.entryLineRanges[entry] = entryLineRange{start: startLine, end: len(m.lineEntries) - 1}
+		}
+
+		lastPrevEntry = lastEntry
+		lastEntry = entry
+		lastTag = entry.Tag
+		lastTimestamp = entry.Timestamp
+		lastWasContinuation = continuation
+		lastPriority = entry.Priority
+		lastPID = entry.PID
+		lastTID = entry.TID
 	}
 
 	m.lastRenderedTag = lastTag
 	m.lastRenderedTime = lastTimestamp
 	m.lastRenderedCont = lastWasContinuation
+	m.lastRenderedPrio = lastPriority
+	m.lastRenderedPID = lastPID
+	m.lastRenderedTID = lastTID
+	m.lastRenderedPrev = lastPrevEntry
+	m.lastRenderedLast = lastEntry
 	m.renderedUpTo = len(m.parsedEntries)
 
 	if len(newLines) > 0 {
