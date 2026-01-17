@@ -61,7 +61,8 @@ func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showT
 	}
 
 	priorityStyle := lipgloss.NewStyle().
-		Foreground(subtleColor).
+		Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
+		Background(subtleColor).
 		Bold(true)
 
 	tagStyle := lipgloss.NewStyle().
@@ -77,9 +78,10 @@ func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showT
 		tagStr = strings.Repeat(" ", TagColumnWidth())
 	}
 
-	priorityStr := strings.Repeat(" ", len(e.Priority.String()))
+	priorityWidth := len(e.Priority.String()) + 2
+	priorityStr := strings.Repeat(" ", priorityWidth)
 	if !continuation {
-		priorityStr = priorityStyle.Render(e.Priority.String())
+		priorityStr = priorityStyle.Render(" " + e.Priority.String() + " ")
 	}
 	message := e.Message
 
@@ -97,7 +99,7 @@ func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showT
 			sep +
 			strings.Repeat(" ", TagColumnWidth()) +
 			sep +
-			strings.Repeat(" ", len(e.Priority.String())) +
+			strings.Repeat(" ", priorityWidth) +
 			sep
 		renderOne := func(s string) string { return messageStyle.Render(s) }
 		return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
@@ -107,7 +109,7 @@ func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showT
 	prefix := tagStr + sep + priorityStr + sep
 	contPrefix := strings.Repeat(" ", TagColumnWidth()) +
 		sep +
-		strings.Repeat(" ", len(e.Priority.String())) +
+		strings.Repeat(" ", priorityWidth) +
 		sep
 	renderOne := func(s string) string { return messageStyle.Render(s) }
 	return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)

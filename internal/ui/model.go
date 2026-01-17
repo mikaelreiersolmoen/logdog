@@ -1271,8 +1271,8 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 	}
 
 	priorityStyle := lipgloss.NewStyle().
-		Foreground(priorityColor).
-		Background(bgStyle.GetBackground()).
+		Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
+		Background(priorityColor).
 		Bold(true)
 
 	tagStyle := lipgloss.NewStyle().
@@ -1293,9 +1293,10 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 
 	message := entry.Message
 
-	priorityStr := bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String())))
+	priorityWidth := len(entry.Priority.String()) + 2
+	priorityStr := bgStyle.Render(strings.Repeat(" ", priorityWidth))
 	if !continuation {
-		priorityStr = priorityStyle.Render(entry.Priority.String())
+		priorityStr = priorityStyle.Render(" " + entry.Priority.String() + " ")
 	}
 	if m.showTimestamp {
 		sep := bgStyle.Render(" ")
@@ -1312,7 +1313,7 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 			sep +
 			bgStyle.Render(strings.Repeat(" ", TagColumnWidth())) +
 			sep +
-			bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))) +
+			bgStyle.Render(strings.Repeat(" ", priorityWidth)) +
 			sep
 		renderOne := func(s string) string { return messageStyle.Render(s) }
 		return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
@@ -1322,7 +1323,7 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 	prefix := tagStr + sep + priorityStr + sep
 	contPrefix := bgStyle.Render(strings.Repeat(" ", TagColumnWidth())) +
 		sep +
-		bgStyle.Render(strings.Repeat(" ", len(entry.Priority.String()))) +
+		bgStyle.Render(strings.Repeat(" ", priorityWidth)) +
 		sep
 	renderOne := func(s string) string { return messageStyle.Render(s) }
 	return wrapWithPrefix(message, renderOne, prefix, contPrefix, maxWidth)
