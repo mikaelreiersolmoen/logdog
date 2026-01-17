@@ -119,53 +119,54 @@ func (d deviceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 }
 
 type Model struct {
-	viewport         viewport.Model
-	logManager       *logcat.Manager
-	lineChan         chan string
-	ready            bool
-	width            int
-	height           int
-	appID            string
-	appStatus        string
-	deviceStatus     string
-	terminating      bool
-	showLogLevel     bool
-	logLevelList     list.Model
-	minLogLevel      logcat.Priority
-	showFilter       bool
-	filterInput      textinput.Model
-	filters          []Filter
-	parsedEntries    []*logcat.Entry
-	needsUpdate      bool
-	highlightedEntry *logcat.Entry
-	selectionMode    bool
-	selectedEntries  map[*logcat.Entry]bool
-	selectionAnchor  *logcat.Entry
-	lineEntries      []*logcat.Entry
-	entryLineRanges  map[*logcat.Entry]entryLineRange
-	renderedLines    []string
-	renderedUpTo     int
-	renderReset      bool
-	viewportContent  string
-	lastRenderedTag  string
-	lastRenderedTime string
-	lastRenderedCont bool
-	lastRenderedPrio logcat.Priority
-	lastRenderedPID  string
-	lastRenderedTID  string
-	lastRenderedPrev *logcat.Entry
-	lastRenderedLast *logcat.Entry
-	renderScheduled  bool
-	wrapLines        bool
-	autoScroll       bool
-	showDeviceSelect bool
-	deviceList       list.Model
-	devices          []adb.Device
-	selectedDevice   string // Device serial or model
-	errorMessage     string
-	showTimestamp    bool
-	showClearConfirm bool
-	clearInput       textinput.Model
+	viewport           viewport.Model
+	logManager         *logcat.Manager
+	lineChan           chan string
+	ready              bool
+	width              int
+	height             int
+	appID              string
+	appStatus          string
+	deviceStatus       string
+	terminating        bool
+	showLogLevel       bool
+	logLevelList       list.Model
+	minLogLevel        logcat.Priority
+	showFilter         bool
+	filterInput        textinput.Model
+	filters            []Filter
+	parsedEntries      []*logcat.Entry
+	needsUpdate        bool
+	highlightedEntry   *logcat.Entry
+	selectionMode      bool
+	selectedEntries    map[*logcat.Entry]bool
+	selectionAnchor    *logcat.Entry
+	lineEntries        []*logcat.Entry
+	entryLineRanges    map[*logcat.Entry]entryLineRange
+	renderedLines      []string
+	renderedUpTo       int
+	renderReset        bool
+	viewportContent    string
+	lastRenderedTag    string
+	lastRenderedTime   string
+	lastRenderedCont   bool
+	lastRenderedPrio   logcat.Priority
+	lastRenderedPID    string
+	lastRenderedTID    string
+	lastRenderedPrev   *logcat.Entry
+	lastRenderedLast   *logcat.Entry
+	renderScheduled    bool
+	wrapLines          bool
+	autoScroll         bool
+	showDeviceSelect   bool
+	deviceList         list.Model
+	devices            []adb.Device
+	selectedDevice     string // Device serial or model
+	errorMessage       string
+	showTimestamp      bool
+	logLevelBackground bool
+	showClearConfirm   bool
+	clearInput         textinput.Model
 }
 
 type errMsg struct{ err error }
@@ -256,31 +257,32 @@ func NewModel(appID string, tailSize int) Model {
 		logManager := logcat.NewManager(appID, tailSize)
 		logManager.SetDevice(devices[0].Serial)
 		model := Model{
-			appID:            appID,
-			logManager:       logManager,
-			lineChan:         make(chan string, 100),
-			showLogLevel:     false,
-			logLevelList:     logLevelList,
-			minLogLevel:      logcat.Verbose,
-			showFilter:       false,
-			filterInput:      filterInput,
-			filters:          []Filter{},
-			parsedEntries:    make([]*logcat.Entry, 0, entryCapacity),
-			needsUpdate:      false,
-			highlightedEntry: nil,
-			selectionMode:    false,
-			selectedEntries:  make(map[*logcat.Entry]bool),
-			selectionAnchor:  nil,
-			autoScroll:       true,
-			showDeviceSelect: false,
-			deviceList:       list.Model{},
-			devices:          devices,
-			selectedDevice:   devices[0].Model,
-			deviceStatus:     "connected",
-			showClearConfirm: false,
-			clearInput:       clearInput,
-			showTimestamp:    false,
-			wrapLines:        false,
+			appID:              appID,
+			logManager:         logManager,
+			lineChan:           make(chan string, 100),
+			showLogLevel:       false,
+			logLevelList:       logLevelList,
+			minLogLevel:        logcat.Verbose,
+			showFilter:         false,
+			filterInput:        filterInput,
+			filters:            []Filter{},
+			parsedEntries:      make([]*logcat.Entry, 0, entryCapacity),
+			needsUpdate:        false,
+			highlightedEntry:   nil,
+			selectionMode:      false,
+			selectedEntries:    make(map[*logcat.Entry]bool),
+			selectionAnchor:    nil,
+			autoScroll:         true,
+			showDeviceSelect:   false,
+			deviceList:         list.Model{},
+			devices:            devices,
+			selectedDevice:     devices[0].Model,
+			deviceStatus:       "connected",
+			showClearConfirm:   false,
+			clearInput:         clearInput,
+			showTimestamp:      false,
+			logLevelBackground: false,
+			wrapLines:          false,
 		}
 		if prefsLoaded {
 			model.applyPreferences(prefs)
@@ -289,30 +291,31 @@ func NewModel(appID string, tailSize int) Model {
 	}
 
 	model := Model{
-		appID:            appID,
-		logManager:       logcat.NewManager(appID, tailSize),
-		lineChan:         make(chan string, 100),
-		showLogLevel:     false,
-		logLevelList:     logLevelList,
-		minLogLevel:      logcat.Verbose,
-		showFilter:       false,
-		filterInput:      filterInput,
-		filters:          []Filter{},
-		parsedEntries:    make([]*logcat.Entry, 0, entryCapacity),
-		needsUpdate:      false,
-		highlightedEntry: nil,
-		selectionMode:    false,
-		selectedEntries:  make(map[*logcat.Entry]bool),
-		selectionAnchor:  nil,
-		autoScroll:       true,
-		showDeviceSelect: showDeviceSelect,
-		deviceList:       deviceList,
-		devices:          devices,
-		selectedDevice:   "",
-		showClearConfirm: false,
-		clearInput:       clearInput,
-		showTimestamp:    false,
-		wrapLines:        false,
+		appID:              appID,
+		logManager:         logcat.NewManager(appID, tailSize),
+		lineChan:           make(chan string, 100),
+		showLogLevel:       false,
+		logLevelList:       logLevelList,
+		minLogLevel:        logcat.Verbose,
+		showFilter:         false,
+		filterInput:        filterInput,
+		filters:            []Filter{},
+		parsedEntries:      make([]*logcat.Entry, 0, entryCapacity),
+		needsUpdate:        false,
+		highlightedEntry:   nil,
+		selectionMode:      false,
+		selectedEntries:    make(map[*logcat.Entry]bool),
+		selectionAnchor:    nil,
+		autoScroll:         true,
+		showDeviceSelect:   showDeviceSelect,
+		deviceList:         deviceList,
+		devices:            devices,
+		selectedDevice:     "",
+		showClearConfirm:   false,
+		clearInput:         clearInput,
+		showTimestamp:      false,
+		logLevelBackground: false,
+		wrapLines:          false,
 	}
 
 	if prefsLoaded {
@@ -332,6 +335,11 @@ func (m *Model) applyPreferences(prefs config.Preferences) {
 
 	m.showTimestamp = prefs.ShowTimestamp
 	m.wrapLines = prefs.WrapLines
+	if prefs.LogLevelBackground != nil {
+		m.logLevelBackground = *prefs.LogLevelBackground
+	} else {
+		m.logLevelBackground = false
+	}
 
 	if prefs.TagColumnWidth > 0 {
 		SetTagColumnWidth(prefs.TagColumnWidth)
@@ -1093,7 +1101,7 @@ func (m *Model) rebuildViewport(scrollToBottom bool) {
 		} else if entry == m.highlightedEntry {
 			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
 		} else {
-			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
+			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, m.logLevelBackground, continuation, maxWidth)
 		}
 
 		startLine := len(lineEntries)
@@ -1199,7 +1207,7 @@ func (m *Model) appendViewport(scrollToBottom bool) {
 		} else if entry == m.highlightedEntry {
 			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
 		} else {
-			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, continuation, maxWidth)
+			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, m.logLevelBackground, continuation, maxWidth)
 		}
 
 		startLine := len(m.lineEntries)
@@ -1270,10 +1278,16 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 		priorityColor = GetVerboseColor()
 	}
 
-	priorityStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
-		Background(priorityColor).
-		Bold(true)
+	priorityStyle := lipgloss.NewStyle().Bold(true)
+	if m.logLevelBackground {
+		priorityStyle = priorityStyle.
+			Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
+			Background(priorityColor)
+	} else {
+		priorityStyle = priorityStyle.
+			Foreground(priorityColor).
+			Background(bgStyle.GetBackground())
+	}
 
 	tagStyle := lipgloss.NewStyle().
 		Foreground(TagColor(entry.Tag)).
@@ -1905,12 +1919,14 @@ func (m Model) PersistPreferences() error {
 		})
 	}
 
+	logLevelBackground := m.logLevelBackground
 	prefs := config.Preferences{
-		Filters:        filterPrefs,
-		MinLogLevel:    m.minLogLevel.String(),
-		ShowTimestamp:  m.showTimestamp,
-		TagColumnWidth: TagColumnWidth(),
-		WrapLines:      m.wrapLines,
+		Filters:            filterPrefs,
+		MinLogLevel:        m.minLogLevel.String(),
+		ShowTimestamp:      m.showTimestamp,
+		TagColumnWidth:     TagColumnWidth(),
+		WrapLines:          m.wrapLines,
+		LogLevelBackground: &logLevelBackground,
 	}
 
 	existingPrefs, exists, prefsErr := config.Load()

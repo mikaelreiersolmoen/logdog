@@ -19,12 +19,13 @@ const DefaultTailSize = 1000
 
 // Preferences holds persisted UI preferences.
 type Preferences struct {
-	Filters        []FilterPreference `json:"filters"`
-	MinLogLevel    string             `json:"minLogLevel"`
-	ShowTimestamp  bool               `json:"showTimestamp"`
-	TagColumnWidth int                `json:"tagColumnWidth"`
-	TailSize       int                `json:"tailSize"`
-	WrapLines      bool               `json:"wrapLines"`
+	Filters            []FilterPreference `json:"filters"`
+	MinLogLevel        string             `json:"minLogLevel"`
+	ShowTimestamp      bool               `json:"showTimestamp"`
+	TagColumnWidth     int                `json:"tagColumnWidth"`
+	TailSize           int                `json:"tailSize"`
+	WrapLines          bool               `json:"wrapLines"`
+	LogLevelBackground *bool              `json:"logLevelBackground,omitempty"`
 }
 
 // Load reads preferences from ~/.config/logdog/config.json.
@@ -101,11 +102,13 @@ func EnsureExists() error {
 
 // DefaultPreferences returns the default config values.
 func DefaultPreferences() Preferences {
+	logLevelBackground := false
 	return Preferences{
-		Filters:       []FilterPreference{},
-		ShowTimestamp: false,
-		WrapLines:     false,
-		TailSize:      DefaultTailSize,
+		Filters:            []FilterPreference{},
+		ShowTimestamp:      false,
+		WrapLines:          false,
+		TailSize:           DefaultTailSize,
+		LogLevelBackground: &logLevelBackground,
 	}
 }
 

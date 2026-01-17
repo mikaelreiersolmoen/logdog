@@ -33,14 +33,14 @@ func TagColumnWidth() int {
 // FormatEntry returns a formatted string with optional timestamp display.
 // When continuation is true, timestamp, tag, and priority columns are blanked
 // to visually indicate that the entry belongs to the previous timestamp.
-func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, continuation bool) string {
-	lines := FormatEntryLines(e, style, showTag, showTimestamp, continuation, 0)
+func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, logLevelBackground bool, continuation bool) string {
+	lines := FormatEntryLines(e, style, showTag, showTimestamp, logLevelBackground, continuation, 0)
 	return strings.Join(lines, "\n")
 }
 
 // FormatEntryLines returns formatted lines with ANSI-aware wrapping.
 // maxWidth is the full line width; when <= 0, wrapping is disabled.
-func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, continuation bool, maxWidth int) []string {
+func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, logLevelBackground bool, continuation bool, maxWidth int) []string {
 	// Get subtle color based on log level
 	var subtleColor lipgloss.TerminalColor
 	switch e.Priority {
@@ -60,10 +60,14 @@ func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showT
 		subtleColor = colorDefault
 	}
 
-	priorityStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
-		Background(subtleColor).
-		Bold(true)
+	priorityStyle := lipgloss.NewStyle().Bold(true)
+	if logLevelBackground {
+		priorityStyle = priorityStyle.
+			Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
+			Background(subtleColor)
+	} else {
+		priorityStyle = priorityStyle.Foreground(subtleColor)
+	}
 
 	tagStyle := lipgloss.NewStyle().
 		Foreground(TagColor(e.Tag))
