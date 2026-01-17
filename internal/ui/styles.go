@@ -11,6 +11,14 @@ var (
 	colorError   = lipgloss.AdaptiveColor{Light: "160", Dark: "210"} // Subtle red
 	colorFatal   = lipgloss.AdaptiveColor{Light: "126", Dark: "211"} // Subtle magenta
 	colorDefault = lipgloss.AdaptiveColor{Light: "0", Dark: "255"}   // Black/White
+
+	// Background colors for log levels (kept in sync with foregrounds by default)
+	colorVerboseBg = lipgloss.AdaptiveColor{Light: "240", Dark: "247"}
+	colorDebugBg   = lipgloss.AdaptiveColor{Light: "31", Dark: "67"}
+	colorInfoBg    = lipgloss.AdaptiveColor{Light: "28", Dark: "109"}
+	colorWarnBg    = lipgloss.AdaptiveColor{Light: "166", Dark: "172"}
+	colorErrorBg   = lipgloss.AdaptiveColor{Light: "160", Dark: "1"}
+	colorFatalBg   = lipgloss.AdaptiveColor{Light: "126", Dark: "211"}
 )
 
 // Color palette for tags - pastel colors that don't overlap with log levels
@@ -61,6 +69,24 @@ func GetErrorColor() lipgloss.TerminalColor { return colorError }
 
 // GetFatalColor returns the color for fatal log level
 func GetFatalColor() lipgloss.TerminalColor { return colorFatal }
+
+// GetVerboseBgColor returns the background color for verbose log level
+func GetVerboseBgColor() lipgloss.TerminalColor { return colorVerboseBg }
+
+// GetDebugBgColor returns the background color for debug log level
+func GetDebugBgColor() lipgloss.TerminalColor { return colorDebugBg }
+
+// GetInfoBgColor returns the background color for info log level
+func GetInfoBgColor() lipgloss.TerminalColor { return colorInfoBg }
+
+// GetWarnBgColor returns the background color for warn log level
+func GetWarnBgColor() lipgloss.TerminalColor { return colorWarnBg }
+
+// GetErrorBgColor returns the background color for error log level
+func GetErrorBgColor() lipgloss.TerminalColor { return colorErrorBg }
+
+// GetFatalBgColor returns the background color for fatal log level
+func GetFatalBgColor() lipgloss.TerminalColor { return colorFatalBg }
 
 // GetAccentColor returns the UI accent color
 func GetAccentColor() lipgloss.TerminalColor { return accentColor }

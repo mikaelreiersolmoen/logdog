@@ -43,28 +43,36 @@ func FormatEntry(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimest
 func FormatEntryLines(e *logcat.Entry, style lipgloss.Style, showTag bool, showTimestamp bool, logLevelBackground bool, continuation bool, maxWidth int) []string {
 	// Get subtle color based on log level
 	var subtleColor lipgloss.TerminalColor
+	var priorityBgColor lipgloss.TerminalColor
 	switch e.Priority {
 	case logcat.Verbose:
 		subtleColor = GetVerboseColor()
+		priorityBgColor = GetVerboseBgColor()
 	case logcat.Debug:
 		subtleColor = GetDebugColor()
+		priorityBgColor = GetDebugBgColor()
 	case logcat.Info:
 		subtleColor = GetInfoColor()
+		priorityBgColor = GetInfoBgColor()
 	case logcat.Warn:
 		subtleColor = GetWarnColor()
+		priorityBgColor = GetWarnBgColor()
 	case logcat.Error:
 		subtleColor = GetErrorColor()
+		priorityBgColor = GetErrorBgColor()
 	case logcat.Fatal:
 		subtleColor = GetFatalColor()
+		priorityBgColor = GetFatalBgColor()
 	default:
 		subtleColor = colorDefault
+		priorityBgColor = GetVerboseBgColor()
 	}
 
 	priorityStyle := lipgloss.NewStyle().Bold(true)
 	if logLevelBackground {
 		priorityStyle = priorityStyle.
 			Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
-			Background(subtleColor)
+			Background(priorityBgColor)
 	} else {
 		priorityStyle = priorityStyle.Foreground(subtleColor)
 	}

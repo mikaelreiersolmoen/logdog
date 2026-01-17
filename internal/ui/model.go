@@ -1259,30 +1259,38 @@ func (m *Model) appendViewport(scrollToBottom bool) {
 // When continuation is true, timestamp, tag, and priority columns are rendered as blank spaces to visually
 // connect entries sharing the same timestamp.
 func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, showTag bool, bgStyle lipgloss.Style, continuation bool, maxWidth int) []string {
-	// Get color for this priority
+	// Get colors for this priority
 	var priorityColor lipgloss.TerminalColor
+	var priorityBgColor lipgloss.TerminalColor
 	switch entry.Priority {
 	case logcat.Verbose:
 		priorityColor = GetVerboseColor()
+		priorityBgColor = GetVerboseBgColor()
 	case logcat.Debug:
 		priorityColor = GetDebugColor()
+		priorityBgColor = GetDebugBgColor()
 	case logcat.Info:
 		priorityColor = GetInfoColor()
+		priorityBgColor = GetInfoBgColor()
 	case logcat.Warn:
 		priorityColor = GetWarnColor()
+		priorityBgColor = GetWarnBgColor()
 	case logcat.Error:
 		priorityColor = GetErrorColor()
+		priorityBgColor = GetErrorBgColor()
 	case logcat.Fatal:
 		priorityColor = GetFatalColor()
+		priorityBgColor = GetFatalBgColor()
 	default:
 		priorityColor = GetVerboseColor()
+		priorityBgColor = GetVerboseBgColor()
 	}
 
 	priorityStyle := lipgloss.NewStyle().Bold(true)
 	if m.logLevelBackground {
 		priorityStyle = priorityStyle.
 			Foreground(lipgloss.AdaptiveColor{Light: "255", Dark: "0"}).
-			Background(priorityColor)
+			Background(priorityBgColor)
 	} else {
 		priorityStyle = priorityStyle.
 			Foreground(priorityColor).
