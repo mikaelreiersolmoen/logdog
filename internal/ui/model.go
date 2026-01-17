@@ -819,15 +819,12 @@ func (m Model) View() string {
 	var statusText string
 
 	switch m.appStatus {
-	case "running":
-		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "71", Dark: "114"}) // Green
-		statusText = "running"
 	case "stopped":
 		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
-		statusText = "stopped"
+		statusText = "not running"
 	case "reconnecting":
 		statusStyle = statusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
-		statusText = "disconnected"
+		statusText = "not running"
 	case "error":
 		statusStyle = statusStyle.Foreground(GetErrorColor())
 		statusText = "error"
@@ -836,7 +833,7 @@ func (m Model) View() string {
 	deviceStatusStyle := lipgloss.NewStyle()
 	var deviceStatusText string
 	if m.deviceStatus == "disconnected" {
-		deviceStatusStyle = deviceStatusStyle.Foreground(GetWarnColor())
+		deviceStatusStyle = deviceStatusStyle.Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "215"}) // Orange
 		deviceStatusText = "disconnected"
 	}
 
@@ -875,7 +872,11 @@ func (m Model) View() string {
 		appStyle := lipgloss.NewStyle().Foreground(GetAccentColor())
 		deviceStyle := lipgloss.NewStyle().Foreground(GetAccentColor())
 		if m.appID != "" {
-			infoParts = append(infoParts, fmt.Sprintf("app: %s (%s)", appStyle.Render(appInfo), statusStyle.Render(statusText)))
+			appInfoText := fmt.Sprintf("app: %s", appStyle.Render(appInfo))
+			if statusText != "" && m.deviceStatus != "disconnected" {
+				appInfoText = fmt.Sprintf("app: %s (%s)", appStyle.Render(appInfo), statusStyle.Render(statusText))
+			}
+			infoParts = append(infoParts, appInfoText)
 		} else {
 			infoParts = append(infoParts, "app: all")
 		}
