@@ -165,6 +165,7 @@ type Model struct {
 	errorMessage       string
 	showTimestamp      bool
 	logLevelBackground bool
+	coloredMessages    bool
 	showClearConfirm   bool
 	clearInput         textinput.Model
 }
@@ -282,6 +283,7 @@ func NewModel(appID string, tailSize int) Model {
 			clearInput:         clearInput,
 			showTimestamp:      false,
 			logLevelBackground: false,
+			coloredMessages:    true,
 			wrapLines:          false,
 		}
 		if prefsLoaded {
@@ -315,6 +317,7 @@ func NewModel(appID string, tailSize int) Model {
 		clearInput:         clearInput,
 		showTimestamp:      false,
 		logLevelBackground: false,
+		coloredMessages:    true,
 		wrapLines:          false,
 	}
 
@@ -339,6 +342,11 @@ func (m *Model) applyPreferences(prefs config.Preferences) {
 		m.logLevelBackground = *prefs.LogLevelBackground
 	} else {
 		m.logLevelBackground = false
+	}
+	if prefs.ColoredMessages != nil {
+		m.coloredMessages = *prefs.ColoredMessages
+	} else {
+		m.coloredMessages = true
 	}
 
 	if prefs.TagColumnWidth > 0 {
@@ -1101,7 +1109,7 @@ func (m *Model) rebuildViewport(scrollToBottom bool) {
 		} else if entry == m.highlightedEntry {
 			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
 		} else {
-			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, m.logLevelBackground, continuation, maxWidth)
+			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, m.logLevelBackground, m.coloredMessages, continuation, maxWidth)
 		}
 
 		startLine := len(lineEntries)
@@ -1207,7 +1215,7 @@ func (m *Model) appendViewport(scrollToBottom bool) {
 		} else if entry == m.highlightedEntry {
 			entryLines = m.formatEntryWithAllColumnsSelectedLines(entry, showTag, highlightStyle, continuation, maxWidth)
 		} else {
-			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, m.logLevelBackground, continuation, maxWidth)
+			entryLines = FormatEntryLines(entry, lipgloss.NewStyle(), showTag, m.showTimestamp, m.logLevelBackground, m.coloredMessages, continuation, maxWidth)
 		}
 
 		startLine := len(m.lineEntries)
@@ -1301,8 +1309,12 @@ func (m *Model) formatEntryWithAllColumnsSelectedLines(entry *logcat.Entry, show
 		Foreground(TagColor(entry.Tag)).
 		Background(bgStyle.GetBackground())
 
+	messageColor := lipgloss.TerminalColor(lipgloss.AdaptiveColor{Light: "0", Dark: "254"})
+	if m.coloredMessages {
+		messageColor = priorityColor
+	}
 	messageStyle := lipgloss.NewStyle().
-		Foreground(priorityColor).
+		Foreground(messageColor).
 		Background(bgStyle.GetBackground())
 
 	var tagStr string
@@ -1928,6 +1940,7 @@ func (m Model) PersistPreferences() error {
 	}
 
 	logLevelBackground := m.logLevelBackground
+	coloredMessages := m.coloredMessages
 	prefs := config.Preferences{
 		Filters:            filterPrefs,
 		MinLogLevel:        m.minLogLevel.String(),
@@ -1935,6 +1948,7 @@ func (m Model) PersistPreferences() error {
 		TagColumnWidth:     TagColumnWidth(),
 		WrapLines:          m.wrapLines,
 		LogLevelBackground: &logLevelBackground,
+		ColoredMessages:    &coloredMessages,
 	}
 
 	existingPrefs, exists, prefsErr := config.Load()

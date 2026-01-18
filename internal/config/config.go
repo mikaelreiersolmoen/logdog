@@ -26,6 +26,7 @@ type Preferences struct {
 	TailSize           int                `json:"tailSize"`
 	WrapLines          bool               `json:"wrapLines"`
 	LogLevelBackground *bool              `json:"logLevelBackground,omitempty"`
+	ColoredMessages    *bool              `json:"coloredMessages,omitempty"`
 }
 
 // Load reads preferences from ~/.config/logdog/config.json.
@@ -103,12 +104,14 @@ func EnsureExists() error {
 // DefaultPreferences returns the default config values.
 func DefaultPreferences() Preferences {
 	logLevelBackground := false
+	coloredMessages := true
 	return Preferences{
 		Filters:            []FilterPreference{},
 		ShowTimestamp:      false,
 		WrapLines:          false,
 		TailSize:           DefaultTailSize,
 		LogLevelBackground: &logLevelBackground,
+		ColoredMessages:    &coloredMessages,
 	}
 }
 
