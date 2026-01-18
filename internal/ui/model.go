@@ -166,6 +166,8 @@ type Model struct {
 	showTimestamp      bool
 	logLevelBackground bool
 	coloredMessages    bool
+	showSettings       bool
+	settingsIndex      int
 	showClearConfirm   bool
 	clearInput         textinput.Model
 }
@@ -191,6 +193,14 @@ type entryLineRange struct {
 	start int
 	end   int
 }
+
+const (
+	settingShowTimestamp = iota
+	settingWrapLines
+	settingLogLevelBackground
+	settingColoredMessages
+	settingCount
+)
 
 func NewModel(appID string, tailSize int) Model {
 	prefs, prefsLoaded, prefsErr := config.Load()
@@ -663,6 +673,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateViewport()
 				return m, nil
 			}
+		} else if m.showSettings {
+			switch msg.String() {
+			case "q", "ctrl+c":
+				m.terminating = true
+				m.logManager.Stop()
+				return m, tea.Quit
+			case "esc", "s":
+				m.showSettings = false
+				return m, nil
+			case "j", "down":
+				m.settingsIndex = (m.settingsIndex + 1) % settingCount
+				return m, nil
+			case "k", "up":
+				m.settingsIndex--
+				if m.settingsIndex < 0 {
+					m.settingsIndex = settingCount - 1
+				}
+				return m, nil
+			case " ", "enter":
+				m.toggleSetting(m.settingsIndex)
+				return m, nil
+			}
 		} else if m.showFilter {
 			switch msg.String() {
 			case "esc":
@@ -707,6 +739,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "l":
 				m.showLogLevel = true
+				return m, nil
+			case "s":
+				m.showSettings = true
+				m.settingsIndex = 0
 				return m, nil
 			case "f":
 				m.showFilter = true
@@ -770,22 +806,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renderReset = true
 				m.updateViewportWithScroll(false)
 				return m, nil
-			case "z", "Z":
-				m.showTimestamp = !m.showTimestamp
-				m.resetRenderCache()
-				m.updateViewportWithScroll(false)
-				return m, nil
-			case "w", "W":
-				m.wrapLines = !m.wrapLines
-				m.resetRenderCache()
-				m.updateViewportWithScroll(m.autoScroll)
-				return m, nil
 			}
 		}
 
 	case tea.MouseMsg:
 		// Only handle mouse release (not drag) to avoid performance issues
-		if msg.Type == tea.MouseRelease && msg.Button == tea.MouseButtonLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect {
+		if msg.Type == tea.MouseRelease && msg.Button == tea.MouseButtonLeft && !m.showLogLevel && !m.showFilter && !m.showDeviceSelect && !m.showSettings {
 			m.autoScroll = false
 			m.handleMouseClick(msg.Y)
 			m.renderReset = true
@@ -800,6 +826,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else if m.showLogLevel {
 		m.logLevelList, cmd = m.logLevelList.Update(msg)
 		cmds = append(cmds, cmd)
+	} else if m.showSettings {
+		// no component update
 	} else if m.showFilter {
 		m.filterInput, cmd = m.filterInput.Update(msg)
 		cmds = append(cmds, cmd)
@@ -836,6 +864,96 @@ func (m Model) layoutHeights() (int, int) {
 	return headerHeight, footerHeight
 }
 
+func (m *Model) settingLabel(index int) string {
+	switch index {
+	case settingShowTimestamp:
+		return "Show timestamp"
+	case settingWrapLines:
+		return "Wrap lines"
+	case settingLogLevelBackground:
+		return "Log level background"
+	case settingColoredMessages:
+		return "Colored messages"
+	default:
+		return ""
+	}
+}
+
+func (m *Model) settingValue(index int) bool {
+	switch index {
+	case settingShowTimestamp:
+		return m.showTimestamp
+	case settingWrapLines:
+		return m.wrapLines
+	case settingLogLevelBackground:
+		return m.logLevelBackground
+	case settingColoredMessages:
+		return m.coloredMessages
+	default:
+		return false
+	}
+}
+
+func (m *Model) toggleSetting(index int) {
+	switch index {
+	case settingShowTimestamp:
+		m.showTimestamp = !m.showTimestamp
+		m.resetRenderCache()
+		m.updateViewportWithScroll(false)
+	case settingWrapLines:
+		m.wrapLines = !m.wrapLines
+		m.resetRenderCache()
+		m.updateViewportWithScroll(m.autoScroll)
+	case settingLogLevelBackground:
+		m.logLevelBackground = !m.logLevelBackground
+		m.resetRenderCache()
+		m.updateViewportWithScroll(false)
+	case settingColoredMessages:
+		m.coloredMessages = !m.coloredMessages
+		m.resetRenderCache()
+		m.updateViewportWithScroll(false)
+	}
+}
+
+func (m *Model) settingsView() string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(GetAccentColor())
+	title := titleStyle.Render("Settings")
+
+	itemStyle := lipgloss.NewStyle().PaddingLeft(1)
+	selectedStyle := itemStyle.Foreground(GetAccentColor()).Bold(true)
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	lines := make([]string, 0, settingCount+2)
+	lines = append(lines, title)
+
+	for i := 0; i < settingCount; i++ {
+		cursor := " "
+		style := itemStyle
+		if i == m.settingsIndex {
+			cursor = "›"
+			style = selectedStyle
+		}
+		checkbox := "[ ]"
+		if m.settingValue(i) {
+			checkbox = "[x]"
+		}
+		line := fmt.Sprintf("%s %s %s", cursor, checkbox, m.settingLabel(i))
+		lines = append(lines, style.Render(line))
+	}
+
+	help := helpStyle.Render("space: toggle | j/k: move | esc: back")
+	lines = append(lines, "", help)
+
+	panelStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		Padding(1, 2).
+		Width(m.width)
+
+	return "\n" + panelStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
 func (m Model) View() string {
 	if m.showDeviceSelect {
 		return "\n" + m.deviceList.View()
@@ -847,6 +965,10 @@ func (m Model) View() string {
 
 	if m.showLogLevel {
 		return "\n" + m.logLevelList.View()
+	}
+
+	if m.showSettings {
+		return m.settingsView()
 	}
 
 	headerStyle := lipgloss.NewStyle().
@@ -1009,7 +1131,7 @@ func (m Model) View() string {
 		selectionInfo := "SELECTION | j/k: extend | c: copy lines | C: copy messages | esc: cancel"
 		footer = footerStyle.Render(selectionInfo)
 	} else {
-		baseHelp := "q: quit | c: clear | click: highlight | v: select | l: log level | f: filter | z: toggle timestamp | w: toggle line wrap"
+		baseHelp := "q: quit | c: clear | click: highlight | v: select | l: log level | f: filter | s: settings"
 		footer = footerStyle.Render(baseHelp)
 	}
 
