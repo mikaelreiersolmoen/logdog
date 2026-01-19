@@ -923,7 +923,7 @@ func (m *Model) settingsView() string {
 
 	itemStyle := lipgloss.NewStyle().PaddingLeft(1)
 	selectedStyle := itemStyle.Foreground(GetAccentColor()).Bold(true)
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 	lines := make([]string, 0, settingCount+2)
 	lines = append(lines, title)
@@ -1089,14 +1089,14 @@ func (m Model) View() string {
 	header := lipgloss.JoinVertical(lipgloss.Left, headerLines...)
 
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
+		Foreground(lipgloss.Color("245")).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderTop(true).
 		PaddingLeft(1).
 		Width(m.width)
 
 	footerStyleNoBorder := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
+		Foreground(lipgloss.Color("245")).
 		PaddingLeft(1).
 		Width(m.width)
 
@@ -1108,7 +1108,7 @@ func (m Model) View() string {
 			Render("filter: ")
 
 		filterHelp := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(lipgloss.Color("245")).
 			Render("comma-separated, tag: prefix for tags | enter: apply | esc: cancel")
 
 		filterLine := footerStyleNoBorder.Render(filterLabel + m.filterInput.View())
@@ -1121,7 +1121,7 @@ func (m Model) View() string {
 			Render("clear log? ")
 
 		clearHelp := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(lipgloss.Color("245")).
 			Render("y/yes: clear | n/no: cancel | esc: cancel")
 
 		clearLine := footerStyleNoBorder.Render(clearLabel + m.clearInput.View())
