@@ -1,6 +1,6 @@
 # Logdog
 
-A text-based interface for viewing and filtering Android logcat stream.
+An interactive text-based interface for viewing and filtering Android logcat stream.
 
 ![logdog screenshot](screenshot.png)
 
